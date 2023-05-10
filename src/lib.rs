@@ -1,6 +1,9 @@
 use num::PrimInt;
 use std::ops::{Add, Mul};
 
+#[cfg(test)]
+mod tests;
+
 #[derive(Debug)]
 pub struct Scalar<T>
 where
@@ -8,7 +11,8 @@ where
 {
     value: T,
 }
-#[derive(Debug, PartialEq)]
+
+#[derive(Debug, PartialEq, Clone)]
 pub struct Tensor<T>
 where
     T: Copy + Clone,
@@ -17,73 +21,28 @@ where
     shape: Vec<usize>,  // TODO: convert to let this be a slice
 }
 
-// impl<T> Mul for Tensor<T>
-// where
-// T: PrimInt + Copy + Clone + Mul + Add,
-// {
-// type Output = Tensor<T>;
+#[derive(Debug, PartialEq, Clone)]
+pub struct TensorView<'a, T>
+where
+    T: Copy + Clone,
+{
+    tensor: &'a Tensor<T>,
+    shape: Vec<usize>, // TODO: convert to let this be a slice
+}
 
-// fn mul(self, right: &Tensor<T>) -> Tensor<T> {
-// assert!(self.same_shape(right)); // TODO: add broadcasting
-// if self.shape.len() == 1 {
-// return self.dot(right);
-// }
-// return self.bmm(right);
-// }
-// }
+#[derive(Debug, PartialEq, Clone)]
+pub struct FrozenTensorView<'a, T>
+where
+    T: Copy + Clone,
+{
+    tensor: &'a Tensor<T>,
+    shape: &'a Vec<usize>, // TODO: convert to let this be a slice
+}
 
-// TODO: implement views
-// a borrowed Tensor, but with a new shape.
 impl<T> Tensor<T>
 where
     T: PrimInt + Copy + Clone + Mul + Add,
 {
-    pub fn bmm(&self, right: &Tensor<T>) -> Tensor<T> {
-        // assert!(self.same_shape(right));
-        assert!(2 <= self.shape.len() && self.shape.len() <= 3); // For now we can only do Batch matrix
-        assert!(right.shape.len() == 2); // rhs must be a matrix
-        assert!(self.shape[self.shape.len() - 1] == right.shape[right.shape.len() - 2]);
-
-        let new_shape;
-        if self.shape.len() == 2 {
-            new_shape = vec![1, self.shape[0], right.shape[1]];
-        } else {
-            new_shape = vec![self.shape[0], self.shape[1], right.shape[1]];
-        }
-
-        let mut result = Tensor::new_empty(new_shape);
-
-        let mut self_index = self.shape.clone();
-        let self_index_len = self_index.len();
-        let mut right_index = right.shape.clone();
-        for batch_idx in 0..result.shape[0] {
-            if self.shape.len() == 3 {
-                self_index[0] = batch_idx;
-            }
-            for i in 0..result.shape[1] {
-                self_index[self_index_len - 2] = i;
-                for j in 0..result.shape[2] {
-                    right_index[1] = j;
-                    let mut val = T::zero();
-                    for k in 0..right.shape[0] {
-                        self_index[self_index_len - 1] = k;
-                        right_index[0] = k;
-                        val =
-                            val + self.get(&self_index).unwrap() * right.get(&right_index).unwrap();
-                    }
-                    result.array.push(val);
-                }
-            }
-        }
-        if self.shape.len() == 2 {
-            return Tensor {
-                array: result.array,
-                shape: result.shape[1..].to_vec(),
-            };
-        }
-        result
-    }
-
     fn new_empty(shape: Vec<usize>) -> Tensor<T> {
         let mut total = 1;
         for &dim in shape.iter() {
@@ -113,17 +72,78 @@ where
     }
 
     pub fn new(array: Vec<T>, shape: Vec<usize>) -> Tensor<T> {
+        let mut len = 1;
+        for (i, dim) in shape.iter().enumerate() {
+            len *= dim;
+        }
+        assert_eq!(len, array.len());
         Tensor {
             array: Box::new(array),
             shape,
         }
     }
+    // pub fn from_tensor(tensor: &'a Tensor<T>, shape: Vec<usize>) -> TensorView<'a, T> {
+    // &FrozenTensorView { tensor, shape }
+    // }
+    pub fn view<'a>(&'a self, shape: Vec<usize>) -> TensorView<'a, T> {
+        TensorView {
+            tensor: &self,
+            shape,
+        }
+    }
+    pub fn to_view<'a>(&'a self) -> TensorView<'a, T> {
+        TensorView {
+            tensor: &self,
+            shape: self.shape.clone(),
+        }
+    }
+    pub fn freeze<'a>(&'a self) -> FrozenTensorView<'a, T> {
+        FrozenTensorView {
+            tensor: &self,
+            shape: &self.shape,
+        }
+    }
+}
+impl<T> TensorLike<T> for Tensor<T>
+where
+    T: PrimInt + Copy + Clone + Mul + Add,
+{
+    fn shape(&self) -> &Vec<usize> {
+        &self.shape
+    }
 
+    fn get(&self, index: &Vec<usize>) -> Result<T, String> {
+        self.freeze().get(index)
+    }
+
+    fn tensor(&self) -> &Tensor<T> {
+        &self
+    }
+}
+
+// TODO: implement views
+// a borrowed Tensor, but with a new shape.
+impl<'a, T> TensorView<'a, T>
+where
+    T: PrimInt + Copy + Clone + Mul + Add,
+{
+    pub fn freeze<'b>(&'b self) -> FrozenTensorView<'b, T> {
+        FrozenTensorView {
+            tensor: self.tensor,
+            shape: &self.shape,
+        }
+    }
+}
+
+impl<'a, T> FrozenTensorView<'a, T>
+where
+    T: PrimInt + Copy + Clone + Mul + Add,
+{
     pub fn get_global(&self, index: usize) -> Option<&T> {
-        if index >= self.array.len() {
+        if index >= self.tensor.array.len() {
             return None;
         }
-        Some(&self.array[index])
+        Some(&self.tensor.array[index])
     }
 
     pub fn get(&self, index: &Vec<usize>) -> Result<T, String> {
@@ -139,7 +159,7 @@ where
         for (i, (dim, idx_dim)) in self.shape.iter().zip(index.iter()).enumerate().rev() {
             if dim <= idx_dim {
                 return Err(format!(
-                    "shape do not match -- Tensor has dimension:\n{:?}\nindex is:\n{:?}\nthe {}th position is out-of-bounds!",
+                    "shape do not match -- &TensorView has dimension:\n{:?}\nindex is:\n{:?}\nthe {}th position is out-of-bounds!",
                     self.shape,
                     index,
                     i,
@@ -148,103 +168,92 @@ where
             global_idx += idx_dim * multiplier;
             multiplier *= dim;
         }
-        Ok(self.array[global_idx])
+        Ok(self.tensor.array[global_idx])
     }
-
-    pub fn dot(&self, other: &Tensor<T>) -> T {
-        //! generalised dot product: returns to acculumulated sum of the elementwise product.
-        assert!(self.same_shape(other));
-        let mut result = T::zero();
-        for i in 0..self.array.len() {
-            result = result + self.array[i] * other.array[i];
-        }
-        result
-    }
-
-    pub fn same_shape(&self, other: &Tensor<T>) -> bool {
-        self.shape == other.shape
-    }
-
     pub fn shape(&self) -> &Vec<usize> {
         &self.shape
     }
 }
+pub trait TensorLike<'a, T, L>
+where
+    T: PrimInt + Copy + Clone + Mul + Add,
+    L: TensorLike<T>,
+{
+    fn shape(&self) -> &Vec<usize>;
+    fn get(&self, index: &Vec<usize>) -> Result<T, String>;
+    fn tensor(&self) -> &Tensor<T>;
+    fn bmm(&self, right: &L<T>) -> Tensor<T> {
+        // assert!(self.same_shape(right));
+        assert!(2 <= self.shape().len() && self.shape().len() <= 3); // For now we can only do Batch matrix
+        assert!(right.shape.len() == 2); // rhs must be a matrix
+        assert!(self.shape()[self.shape().len() - 1] == right.shape[right.shape.len() - 2]);
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    #[test]
-    fn test_new_with_filler() {
-        let vec = Tensor::new_with_filler(vec![4], 4);
-        assert_eq!(vec.shape(), &vec![4]);
-        assert_eq!(vec.get_global(2).unwrap(), &4);
-    }
+        let new_shape;
+        if self.shape().len() == 2 {
+            new_shape = vec![1, self.shape()[0], right.shape[1]];
+        } else {
+            new_shape = vec![self.shape()[0], self.shape()[1], right.shape[1]];
+        }
 
-    #[test]
-    fn test_get_2x2x2() {
-        let matrix = Tensor::new(vec![0, 1, 2, 3, 4, 5, 6, 7], vec![2, 2, 2]);
-        assert_eq!(matrix.get(&vec![0, 0, 0]).unwrap(), 0);
-        assert_eq!(matrix.get(&vec![0, 1, 0]).unwrap(), 2);
-        assert_eq!(matrix.get(&vec![1, 1, 1]).unwrap(), 7);
-    }
+        let mut result = Tensor::new_empty(new_shape);
 
-    #[test]
-    fn test_get_3x3x4() {
-        let matrix = Tensor::new((0..(3 * 3 * 4)).collect(), vec![3, 3, 4]);
-        assert_eq!(matrix.get(&vec![0, 0, 0]).unwrap(), 0);
-        assert_eq!(matrix.get(&vec![2, 2, 3]).unwrap(), 3 * 3 * 4 - 1);
-    }
-
-    #[test]
-    fn test_get_3x3() {
-        let matrix = Tensor::new(vec![0, 1, 2, 3, 4, 5, 6, 7, 8], vec![3, 3]);
-        let mut prev = -1;
-        for i in 0..3 {
-            for j in 0..3 {
-                let curr = matrix.get(&vec![i, j]).unwrap();
-                println!(
-                    "prev={prev}, matrix[{i}][{j}]={}",
-                    matrix.get(&vec![i, j]).unwrap()
-                );
-                assert_eq!(prev + 1, curr);
-                prev = curr;
+        let mut self_index = self.shape().clone();
+        let self_index_len = self_index.len();
+        let mut right_index = right.shape.clone();
+        for batch_idx in 0..result.shape[0] {
+            if self.shape().len() == 3 {
+                self_index[0] = batch_idx;
+            }
+            for i in 0..result.shape[1] {
+                self_index[self_index_len - 2] = i;
+                for j in 0..result.shape[2] {
+                    right_index[1] = j;
+                    let mut val = T::zero();
+                    for k in 0..right.shape[0] {
+                        self_index[self_index_len - 1] = k;
+                        right_index[0] = k;
+                        val =
+                            val + self.get(&self_index).unwrap() * right.get(&right_index).unwrap();
+                    }
+                    result.array.push(val);
+                }
             }
         }
-        assert_eq!(matrix.get(&vec![0, 0]).unwrap(), 0);
-        assert_eq!(matrix.get(&vec![0, 1]).unwrap(), 1);
-        assert_eq!(matrix.get(&vec![1, 0]).unwrap(), 3);
-        assert_eq!(matrix.get(&vec![2, 2]).unwrap(), 8);
+        if self.shape().len() == 2 {
+            return Tensor {
+                array: result.array,
+                shape: result.shape[1..].to_vec(),
+            };
+        }
+        result
     }
 
-    #[test]
-    fn test_dot() {
-        let v = vec![0, 1, 2];
-        let vec = Tensor::new(v, vec![3]);
-        assert_eq!(vec.dot(&vec), 5);
-    }
-    #[test]
-    fn test_creation() {
-        let v = vec![0, 1, 2, 3];
-        let matrix = Tensor::new(v, vec![2, 2]);
-
-        format!("Matrix: \n{:?}", matrix);
-
-        assert_eq!(matrix.get_global(0).unwrap(), &0);
+    fn dot(&self, other: &L<T>) -> T {
+        //! generalised dot product: returns to acculumulated sum of the elementwise product.
+        assert!(self.same_shape(other));
+        let mut result = T::zero();
+        for i in 0..self.tensor().array.len() {
+            result = result + self.tensor().array[i] * other.tensor().array[i];
+        }
+        result
     }
 
-    #[test]
-    fn test_bmm_2x2() {
-        let v = vec![0, 1, 2, 3];
-        let matrix = Tensor::new(v, vec![2, 2]);
-        let shape = vec![2, 1];
-        let e1 = Tensor::new(vec![0, 1], vec![2, 1]);
-        let e2 = Tensor::new(vec![1, 0], vec![2, 1]);
-        let diag = Tensor::new(vec![1, 1], vec![2, 1]);
-
-        let r = matrix.bmm(&diag);
-        assert_eq!(r.shape(), &shape);
-        assert_eq!(r, Tensor::new(vec![1, 5], shape.clone()));
-        assert_eq!(matrix.bmm(&e1), Tensor::new(vec![1, 3], shape.clone()));
-        assert_eq!(matrix.bmm(&e2), Tensor::new(vec![0, 2], shape.clone()));
+    fn same_shape(&self, other: &FrozenTensorView<T>) -> bool {
+        self.shape() == other.shape()
     }
 }
+
+// impl<T> Mul for Tensor<T>
+// where
+// T: PrimInt + Copy + Clone + Mul + Add,
+// {
+// type Output = Tensor<T>;
+
+// fn mul(self, right: &Tensor<T>) -> Tensor<T> {
+// assert!(self.same_shape(right)); // TODO: add broadcasting
+// if self.shape.len() == 1 {
+// return self.dot(right);
+// }
+// return self.bmm(right);
+// }
+// }
