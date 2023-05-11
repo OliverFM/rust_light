@@ -104,7 +104,7 @@ where
         }
     }
 }
-impl<T> TensorLike<T> for Tensor<T>
+impl<'a, T> TensorLike<'a, T> for Tensor<T>
 where
     T: PrimInt + Copy + Clone + Mul + Add,
 {
@@ -112,9 +112,9 @@ where
         &self.shape
     }
 
-    fn get(&self, index: &Vec<usize>) -> Result<T, String> {
-        self.freeze().get(index)
-    }
+    // fn get(&self, index: &Vec<usize>) -> Result<&T, String> {
+    // self.freeze().get(index)
+    // }
 
     fn tensor(&self) -> &Tensor<T> {
         &self
@@ -146,21 +146,33 @@ where
         Some(&self.tensor.array[index])
     }
 
-    pub fn get(&self, index: &Vec<usize>) -> Result<T, String> {
-        if index.len() != self.shape.len() {
+    pub fn shape(&self) -> &Vec<usize> {
+        &self.shape
+    }
+}
+pub trait TensorLike<'a, T>
+where
+    T: PrimInt + Copy + Clone + Mul + Add,
+{
+    fn shape(&self) -> &Vec<usize>;
+    fn tensor(&self) -> &Tensor<T>;
+    fn get(&self, index: &Vec<usize>) -> Result<&T, String> {
+        let tensor = self.tensor();
+        let shape = self.shape();
+        if index.len() != shape.len() {
             return Err(format!(
                 "shape do not match, expected {} shape but got {} shape!",
-                self.shape.len(),
+                shape.len(),
                 index.len(),
             ));
         }
         let mut global_idx = 0;
         let mut multiplier = 1;
-        for (i, (dim, idx_dim)) in self.shape.iter().zip(index.iter()).enumerate().rev() {
+        for (i, (dim, idx_dim)) in shape.iter().zip(index.iter()).enumerate().rev() {
             if dim <= idx_dim {
                 return Err(format!(
                     "shape do not match -- &TensorView has dimension:\n{:?}\nindex is:\n{:?}\nthe {}th position is out-of-bounds!",
-                    self.shape,
+                    shape,
                     index,
                     i,
                 ));
@@ -168,38 +180,27 @@ where
             global_idx += idx_dim * multiplier;
             multiplier *= dim;
         }
-        Ok(self.tensor.array[global_idx])
+        Ok(&tensor.array[global_idx])
     }
-    pub fn shape(&self) -> &Vec<usize> {
-        &self.shape
-    }
-}
-pub trait TensorLike<'a, T, L>
-where
-    T: PrimInt + Copy + Clone + Mul + Add,
-    L: TensorLike<T>,
-{
-    fn shape(&self) -> &Vec<usize>;
-    fn get(&self, index: &Vec<usize>) -> Result<T, String>;
-    fn tensor(&self) -> &Tensor<T>;
-    fn bmm(&self, right: &L<T>) -> Tensor<T> {
+
+    fn bmm(&self, right: &dyn TensorLike<T>) -> Tensor<T> {
         // assert!(self.same_shape(right));
         assert!(2 <= self.shape().len() && self.shape().len() <= 3); // For now we can only do Batch matrix
-        assert!(right.shape.len() == 2); // rhs must be a matrix
-        assert!(self.shape()[self.shape().len() - 1] == right.shape[right.shape.len() - 2]);
+        assert!(right.shape().len() == 2); // rhs must be a matrix
+        assert!(self.shape()[self.shape().len() - 1] == right.shape()[right.shape().len() - 2]);
 
         let new_shape;
         if self.shape().len() == 2 {
-            new_shape = vec![1, self.shape()[0], right.shape[1]];
+            new_shape = vec![1, self.shape()[0], right.shape()[1]];
         } else {
-            new_shape = vec![self.shape()[0], self.shape()[1], right.shape[1]];
+            new_shape = vec![self.shape()[0], self.shape()[1], right.shape()[1]];
         }
 
         let mut result = Tensor::new_empty(new_shape);
 
         let mut self_index = self.shape().clone();
         let self_index_len = self_index.len();
-        let mut right_index = right.shape.clone();
+        let mut right_index = right.shape().clone();
         for batch_idx in 0..result.shape[0] {
             if self.shape().len() == 3 {
                 self_index[0] = batch_idx;
@@ -209,11 +210,11 @@ where
                 for j in 0..result.shape[2] {
                     right_index[1] = j;
                     let mut val = T::zero();
-                    for k in 0..right.shape[0] {
+                    for k in 0..right.shape()[0] {
                         self_index[self_index_len - 1] = k;
                         right_index[0] = k;
-                        val =
-                            val + self.get(&self_index).unwrap() * right.get(&right_index).unwrap();
+                        val = val
+                            + *self.get(&self_index).unwrap() * *right.get(&right_index).unwrap();
                     }
                     result.array.push(val);
                 }
@@ -228,7 +229,7 @@ where
         result
     }
 
-    fn dot(&self, other: &L<T>) -> T {
+    fn dot(&self, other: &dyn TensorLike<T>) -> T {
         //! generalised dot product: returns to acculumulated sum of the elementwise product.
         assert!(self.same_shape(other));
         let mut result = T::zero();
@@ -238,7 +239,7 @@ where
         result
     }
 
-    fn same_shape(&self, other: &FrozenTensorView<T>) -> bool {
+    fn same_shape(&self, other: &dyn TensorLike<T>) -> bool {
         self.shape() == other.shape()
     }
 }

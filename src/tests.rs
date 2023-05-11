@@ -3,22 +3,22 @@ use super::*;
 fn test_new_with_filler() {
     let vec = Tensor::new_with_filler(vec![4], 4);
     assert_eq!(vec.shape(), &vec![4]);
-    assert_eq!(vec.get_global(2).unwrap(), &4);
+    assert_eq!(vec.get(&vec![0]).unwrap(), &4);
 }
 
 #[test]
 fn test_get_2x2x2() {
     let matrix = Tensor::new(vec![0, 1, 2, 3, 4, 5, 6, 7], vec![2, 2, 2]);
-    assert_eq!(matrix.get(&vec![0, 0, 0]).unwrap(), 0);
-    assert_eq!(matrix.get(&vec![0, 1, 0]).unwrap(), 2);
-    assert_eq!(matrix.get(&vec![1, 1, 1]).unwrap(), 7);
+    assert_eq!(*matrix.get(&vec![0, 0, 0]).unwrap(), 0);
+    assert_eq!(*matrix.get(&vec![0, 1, 0]).unwrap(), 2);
+    assert_eq!(*matrix.get(&vec![1, 1, 1]).unwrap(), 7);
 }
 
 #[test]
 fn test_get_3x3x4() {
     let matrix = Tensor::new((0..(3 * 3 * 4)).collect(), vec![3, 3, 4]);
-    assert_eq!(matrix.get(&vec![0, 0, 0]).unwrap(), 0);
-    assert_eq!(matrix.get(&vec![2, 2, 3]).unwrap(), 3 * 3 * 4 - 1);
+    assert_eq!(*matrix.get(&vec![0, 0, 0]).unwrap(), 0);
+    assert_eq!(*matrix.get(&vec![2, 2, 3]).unwrap(), 3 * 3 * 4 - 1);
 }
 
 #[test]
@@ -27,7 +27,7 @@ fn test_get_3x3() {
     let mut prev = -1;
     for i in 0..3 {
         for j in 0..3 {
-            let curr = matrix.get(&vec![i, j]).unwrap();
+            let &curr = matrix.get(&vec![i, j]).unwrap();
             println!(
                 "prev={prev}, matrix[{i}][{j}]={}",
                 matrix.get(&vec![i, j]).unwrap()
@@ -36,10 +36,10 @@ fn test_get_3x3() {
             prev = curr;
         }
     }
-    assert_eq!(matrix.get(&vec![0, 0]).unwrap(), 0);
-    assert_eq!(matrix.get(&vec![0, 1]).unwrap(), 1);
-    assert_eq!(matrix.get(&vec![1, 0]).unwrap(), 3);
-    assert_eq!(matrix.get(&vec![2, 2]).unwrap(), 8);
+    assert_eq!(matrix.get(&vec![0, 0]).unwrap(), &0);
+    assert_eq!(matrix.get(&vec![0, 1]).unwrap(), &1);
+    assert_eq!(matrix.get(&vec![1, 0]).unwrap(), &3);
+    assert_eq!(matrix.get(&vec![2, 2]).unwrap(), &8);
 }
 
 #[test]
@@ -55,7 +55,7 @@ fn test_creation() {
 
     format!("Matrix: \n{:?}", matrix);
 
-    assert_eq!(matrix.get_global(0).unwrap(), &0);
+    assert_eq!(matrix.get(&vec![0, 0]).unwrap(), &0);
 }
 
 #[test]
