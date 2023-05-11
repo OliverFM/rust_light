@@ -2,7 +2,8 @@ use super::*;
 #[test]
 fn test_new_with_filler() {
     let vec = Tensor::new_with_filler(vec![4], 4);
-    assert_eq!(vec.shape(), &vec![4]);
+    let shape = vec.shape();
+    assert_eq!(shape, &vec![4]);
     assert_eq!(vec.get(&vec![0]).unwrap(), &4);
 }
 

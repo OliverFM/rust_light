@@ -73,7 +73,7 @@ where
 
     pub fn new(array: Vec<T>, shape: Vec<usize>) -> Tensor<T> {
         let mut len = 1;
-        for (i, dim) in shape.iter().enumerate() {
+        for dim in shape.iter() {
             len *= dim;
         }
         assert_eq!(len, array.len());
@@ -150,10 +150,23 @@ where
         &self.shape
     }
 }
+
 pub trait TensorLike<'a, T>
 where
     T: PrimInt + Copy + Clone + Mul + Add,
 {
+    fn dot<U>(&self, other: &U) -> T
+    where
+        U: for<'b> TensorLike<'b, T>,
+    {
+        //! generalised dot product: returns to acculumulated sum of the elementwise product.
+        // assert!(self.same_shape(other));
+        let mut result = T::zero();
+        for i in 0..self.tensor().array.len() {
+            result = result + self.tensor().array[i] * other.tensor().array[i];
+        }
+        result
+    }
     fn shape(&self) -> &Vec<usize>;
     fn tensor(&self) -> &Tensor<T>;
     fn get(&self, index: &Vec<usize>) -> Result<&T, String> {
@@ -183,7 +196,10 @@ where
         Ok(&tensor.array[global_idx])
     }
 
-    fn bmm(&self, right: &dyn TensorLike<T>) -> Tensor<T> {
+    fn bmm<U>(&self, right: &U) -> Tensor<T>
+    where
+        U: for<'b> TensorLike<'b, T>,
+    {
         // assert!(self.same_shape(right));
         assert!(2 <= self.shape().len() && self.shape().len() <= 3); // For now we can only do Batch matrix
         assert!(right.shape().len() == 2); // rhs must be a matrix
@@ -229,17 +245,10 @@ where
         result
     }
 
-    fn dot(&self, other: &dyn TensorLike<T>) -> T {
-        //! generalised dot product: returns to acculumulated sum of the elementwise product.
-        assert!(self.same_shape(other));
-        let mut result = T::zero();
-        for i in 0..self.tensor().array.len() {
-            result = result + self.tensor().array[i] * other.tensor().array[i];
-        }
-        result
-    }
-
-    fn same_shape(&self, other: &dyn TensorLike<T>) -> bool {
+    fn same_shape<U>(&self, other: &U) -> bool
+    where
+        U: for<'b> TensorLike<'b, T>,
+    {
         self.shape() == other.shape()
     }
 }
