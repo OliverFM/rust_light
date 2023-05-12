@@ -4,13 +4,15 @@ use std::ops::{Add, Mul};
 #[cfg(test)]
 mod tests;
 
-#[derive(Debug)]
-pub struct Scalar<T>
-where
-    T: Copy + Clone,
-{
-    value: T,
-}
+mod linear_model;
+
+// #[derive(Debug)]
+// pub struct Scalar<T>
+// where
+// T: Copy + Clone,
+// {
+// value: T,
+// }
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct Tensor<T>
@@ -160,15 +162,18 @@ where
         U: for<'b> TensorLike<'b, T>,
     {
         //! generalised dot product: returns to acculumulated sum of the elementwise product.
-        // assert!(self.same_shape(other));
+        assert!(self.same_shape(other));
         let mut result = T::zero();
         for i in 0..self.tensor().array.len() {
             result = result + self.tensor().array[i] * other.tensor().array[i];
         }
         result
     }
+
     fn shape(&self) -> &Vec<usize>;
+
     fn tensor(&self) -> &Tensor<T>;
+
     fn get(&self, index: &Vec<usize>) -> Result<&T, String> {
         let tensor = self.tensor();
         let shape = self.shape();
@@ -196,15 +201,34 @@ where
         Ok(&tensor.array[global_idx])
     }
 
+    /// A Naive batch matrix multiply operation
+    ///
+    /// ```
+    /// # use rust_light::*;
+    /// let v = vec![0, 1, 2, 3];
+    /// let matrix = Tensor::new(v, vec![2, 2]);
+    /// let shape = vec![2, 1];
+    /// let e1 = Tensor::new(vec![0, 1], vec![2, 1]);
+    /// let e2 = Tensor::new(vec![1, 0], vec![2, 1]);
+    /// let diag = Tensor::new(vec![1, 1], vec![2, 1]);
+    /// let r = matrix.bmm(&diag);
+    ///
+    /// assert_eq!(r.shape(), &shape);
+    /// assert_eq!(r, Tensor::new(vec![1, 5], shape.clone()));
+    /// assert_eq!(matrix.bmm(&e1), Tensor::new(vec![1, 3], shape.clone()));
+    /// ```
     fn bmm<U>(&self, right: &U) -> Tensor<T>
     where
         U: for<'b> TensorLike<'b, T>,
     {
-        // assert!(self.same_shape(right));
         assert!(2 <= self.shape().len() && self.shape().len() <= 3); // For now we can only do Batch matrix
         assert!(right.shape().len() == 2); // rhs must be a matrix
+        println!(
+            "self.shape()={:?}, right.shape()={:?}",
+            self.shape(),
+            right.shape()
+        );
         assert!(self.shape()[self.shape().len() - 1] == right.shape()[right.shape().len() - 2]);
-
         let new_shape;
         if self.shape().len() == 2 {
             new_shape = vec![1, self.shape()[0], right.shape()[1]];
@@ -241,6 +265,18 @@ where
                 array: result.array,
                 shape: result.shape[1..].to_vec(),
             };
+        }
+        result
+    }
+
+    fn add_no_broadcast<U>(&self, right: &U) -> Tensor<T>
+    where
+        U: for<'b> TensorLike<'b, T>,
+    {
+        assert!(self.same_shape(right));
+        let mut result = Tensor::new_empty((*self.shape()).clone());
+        for (&x, &y) in self.tensor().array.iter().zip(right.tensor().array.iter()) {
+            result.array.push(x + y);
         }
         result
     }
