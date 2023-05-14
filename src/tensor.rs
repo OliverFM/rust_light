@@ -62,7 +62,7 @@ where
         tensor
     }
 
-    pub fn new_scalar(scalar: T) -> Tensor<T> {
+    pub fn scalar(scalar: T) -> Tensor<T> {
         Tensor {
             array: Box::new(vec![scalar]),
             shape: vec![1],
@@ -389,6 +389,25 @@ where
     // }
     // }
 }
+
+// TODO: figure out how to get scalar multiplication with correct typing
+// impl<T: Add<Rhs = &T>> Add for &Tensor<T>
+// where
+// T: PrimInt + Copy + Clone + Mul + Add + std::fmt::Debug,
+// {
+// type Output = Tensor<T>;
+// fn add(self, right: &T) -> Tensor<T> {
+// Tensor::new(
+// self.array
+// .iter()
+// .apply(|x| {
+// x + 1;
+// })
+// .collect(),
+// self.shape.clone(),
+// )
+// }
+// }
 
 impl<T, U> Add<&U> for &Tensor<T>
 where
