@@ -1,10 +1,10 @@
-use super::{Tensor, TensorLike};
+use super::tensor::{Tensor, TensorLike};
 use num::PrimInt;
 use std::ops::{Add, Mul};
 
 pub struct LinearLayer<T>
 where
-    T: PrimInt + Copy + Clone + Mul + Add,
+    T: PrimInt + Copy + Clone + Mul + Add + std::fmt::Debug,
 {
     weights: Tensor<T>,
     bias: Tensor<T>,
@@ -12,22 +12,22 @@ where
 
 impl<T> LinearLayer<T>
 where
-    T: PrimInt + Copy + Clone + Mul + Add,
+    T: PrimInt + Copy + Clone + Mul + Add + std::fmt::Debug,
 {
     pub fn forward<U>(&self, batch: &U) -> Tensor<T>
     where
         U: for<'b> TensorLike<'b, T>,
     {
-        let y = self.weights.bmm(batch);
+        let y = &self.weights * batch;
         println!("y.shape()={:?}", y.shape());
         println!("bias.shape()={:?}", self.bias.shape());
-        let y = y.add_no_broadcast(&self.bias);
+        let y = &y + &self.bias;
         y
     }
 }
 
 #[test]
-fn run_random_layer() {
+fn test_layer() {
     let layer = LinearLayer {
         weights: Tensor::new_with_filler(vec![1, 2, 2], 1),
         bias: Tensor::new_with_filler(vec![1, 2, 1], 1),

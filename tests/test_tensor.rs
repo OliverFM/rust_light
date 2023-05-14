@@ -1,4 +1,5 @@
-use super::*;
+use rust_light::tensor::*;
+
 #[test]
 fn test_new_with_filler() {
     let vec = Tensor::new_with_filler(vec![4], 4);
@@ -44,11 +45,20 @@ fn test_get_3x3() {
 }
 
 #[test]
+fn test_add() {
+    let tensor1 = Tensor::new_with_filler(vec![4, 4], 1);
+    let tensor2 = Tensor::new((0..32).collect(), vec![2, 4, 4]);
+    let tensor3 = Tensor::new((1..33).collect(), vec![2, 4, 4]);
+    assert_eq!(&tensor2 + &tensor1, tensor3);
+    assert_eq!(&tensor1 + &tensor2, tensor3);
+}
+#[test]
 fn test_dot() {
     let v = vec![0, 1, 2];
     let vec = Tensor::new(v, vec![3]);
-    assert_eq!(vec.dot(&vec), 5);
+    assert_eq!(vec.dot(&vec), Tensor::new(vec![5], vec![1]));
 }
+
 #[test]
 fn test_creation() {
     let v = vec![0, 1, 2, 3];
@@ -73,4 +83,13 @@ fn test_bmm_2x2() {
     assert_eq!(r, Tensor::new(vec![1, 5], shape.clone()));
     assert_eq!(matrix.bmm(&e1), Tensor::new(vec![1, 3], shape.clone()));
     assert_eq!(matrix.bmm(&e2), Tensor::new(vec![0, 2], shape.clone()));
+}
+
+#[test]
+fn test_right_scalar_multiplication() {
+    let vec = Tensor::new_with_filler(vec![4], 1);
+    assert_eq!(
+        vec.right_scalar_multiplication(&42),
+        Tensor::new(vec![42, 42, 42, 42], vec![4])
+    );
 }
