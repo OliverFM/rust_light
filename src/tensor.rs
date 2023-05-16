@@ -16,17 +16,17 @@ where
     shape: Vec<usize>,  // TODO: convert to let this be a slice
 }
 
-// impl<T> From<T> for Tensor<T>
-// where
-// T: PrimInt + Copy + Clone + Mul + Add + std::fmt::Debug,
-// {
-// fn from(value: T) -> Self {
-// Tensor {
-// array: Box::new(vec![value]),
-// shape: vec![],
-// }
-// }
-// }
+impl<T> From<T> for Tensor<T>
+where
+    T: PrimInt + Copy + Clone + Mul + Add + std::fmt::Debug,
+{
+    fn from(value: T) -> Self {
+        Tensor {
+            array: Box::new(vec![value]),
+            shape: vec![],
+        }
+    }
+}
 
 // impl<T, U, const N: usize> From<[U; N]> for Tensor<T>
 // where
