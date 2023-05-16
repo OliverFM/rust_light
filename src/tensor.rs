@@ -12,8 +12,8 @@ pub struct Tensor<T>
 where
     T: PrimInt + Copy + Clone + Mul + Add + std::fmt::Debug,
 {
-    array: Box<Vec<T>>, // later on, I will need unsafe code to replace this with a statically sized type
-    shape: Vec<usize>,  // TODO: convert to let this be a slice
+    array: Vec<T>, // later on, I will need unsafe code to replace this with a statically sized type
+    shape: Vec<usize>, // TODO: convert to let this be a slice
 }
 
 impl<T> From<T> for Tensor<T>
@@ -22,7 +22,7 @@ where
 {
     fn from(value: T) -> Self {
         Tensor {
-            array: Box::new(vec![value]),
+            array: vec![value],
             shape: vec![],
         }
     }
@@ -50,11 +50,11 @@ where
         let valid = shapes.iter().all(|shape| *shape == shapes[0]);
         assert!(valid);
 
-        let array = Box::new(arrays.into_iter().flat_map(|arr| arr.into_iter()).collect());
+        let array = arrays.into_iter().flat_map(|arr| arr.into_iter()).collect();
         let mut shape = vec![shapes.len()];
         shape.extend_from_slice(&shapes[0]); // TODO: make this more by chaining iterators before so that we have shapes[0] is a dummy value
         let shape = shape;
-        return Tensor { array, shape };
+        Tensor { array, shape }
     }
 }
 
@@ -88,30 +88,30 @@ where
         }
 
         Tensor {
-            array: Box::new(Vec::with_capacity(total)),
+            array: Vec::with_capacity(total),
             shape,
         }
     }
     pub fn new_with_filler(shape: Vec<usize>, filler: T) -> Tensor<T> {
-        assert!(shape.len() >= 1);
+        assert!(!shape.is_empty());
         let mut total = 1;
         for &dim in shape.iter() {
             total *= dim;
         }
 
         let mut tensor = Tensor {
-            array: Box::new(Vec::with_capacity(total)),
+            array: Vec::with_capacity(total),
             shape,
         };
         for _ in 0..total {
-            tensor.array.push(filler.clone());
+            tensor.array.push(filler);
         }
         tensor
     }
 
     pub fn scalar(scalar: T) -> Tensor<T> {
         Tensor {
-            array: Box::new(vec![scalar]),
+            array: vec![scalar],
             shape: vec![1],
         }
     }
@@ -121,29 +121,26 @@ where
             len *= dim;
         }
         assert_eq!(len, array.len());
-        Tensor {
-            array: Box::new(array),
-            shape,
-        }
+        Tensor { array, shape }
     }
     // pub fn from_tensor(tensor: &'a Tensor<T>, shape: Vec<usize>) -> TensorView<'a, T> {
     // &FrozenTensorView { tensor, shape }
     // }
-    pub fn view<'a>(&'a self, shape: Vec<usize>) -> TensorView<'a, T> {
+    pub fn view(&self, shape: Vec<usize>) -> TensorView<'_, T> {
         TensorView {
-            tensor: &self,
+            tensor: self,
             shape,
         }
     }
-    pub fn to_view<'a>(&'a self) -> TensorView<'a, T> {
+    pub fn to_view(&self) -> TensorView<'_, T> {
         TensorView {
-            tensor: &self,
+            tensor: self,
             shape: self.shape.clone(),
         }
     }
-    pub fn freeze<'a>(&'a self) -> FrozenTensorView<'a, T> {
+    pub fn freeze(&self) -> FrozenTensorView<'_, T> {
         FrozenTensorView {
-            tensor: &self,
+            tensor: self,
             shape: &self.shape,
         }
     }
@@ -162,8 +159,8 @@ where
     /// ```
     fn get(&self, index: &Vec<usize>) -> Result<&T, String> {
         match self.get_global_index(index) {
-            Ok(global_idx) => return Ok(&self.array[global_idx]),
-            Err(e) => return Err(e),
+            Ok(global_idx) => Ok(&self.array[global_idx]),
+            Err(e) => Err(e),
         }
     }
 
@@ -171,9 +168,9 @@ where
         match self.get_global_index(index) {
             Ok(global_idx) => {
                 self.array[global_idx] = value;
-                return Ok(());
+                Ok(())
             }
-            Err(e) => return Err(e),
+            Err(e) => Err(e),
         }
     }
 
@@ -207,7 +204,7 @@ where
     }
 }
 
-impl<'a, T> Index<&Vec<usize>> for Tensor<T>
+impl<T> Index<&Vec<usize>> for Tensor<T>
 where
     T: PrimInt + Copy + Clone + Mul + Add + std::fmt::Debug,
 {
@@ -231,7 +228,7 @@ where
     // }
 
     fn tensor(&self) -> &Tensor<T> {
-        &self
+        self
     }
     fn to_tensor(&self) -> Tensor<T> {
         self.clone()
@@ -248,7 +245,7 @@ where
         (*self.tensor).clone()
     }
 
-    pub fn freeze<'b>(&'b self) -> FrozenTensorView<'b, T> {
+    pub fn freeze(&self) -> FrozenTensorView<'_, T> {
         FrozenTensorView {
             tensor: self.tensor,
             shape: &self.shape,
@@ -272,7 +269,7 @@ where
     }
 
     pub fn shape(&self) -> &Vec<usize> {
-        &self.shape
+        self.shape
     }
 }
 
@@ -317,7 +314,7 @@ where
             result = result + self.tensor().array[i] * other.tensor().array[i];
         }
         Tensor {
-            array: Box::new(vec![result]),
+            array: vec![result],
             shape: vec![1],
         }
     }
@@ -350,12 +347,11 @@ where
             right.shape()
         );
         assert!(self.shape()[self.shape().len() - 1] == right.shape()[right.shape().len() - 2]);
-        let new_shape;
-        if self.shape().len() == 2 {
-            new_shape = vec![1, self.shape()[0], right.shape()[1]];
+        let new_shape = if self.shape().len() == 2 {
+            vec![1, self.shape()[0], right.shape()[1]]
         } else {
-            new_shape = vec![self.shape()[0], self.shape()[1], right.shape()[1]];
-        }
+            vec![self.shape()[0], self.shape()[1], right.shape()[1]]
+        };
 
         let mut result = Tensor::new_empty(new_shape);
 
@@ -410,7 +406,7 @@ where
         self.shape() == other.shape()
     }
 
-    fn broadcastable(&self, new_shape: &Vec<usize>) -> bool {
+    fn broadcastable(&self, new_shape: &[usize]) -> bool {
         // TODO: test this!
         for (&d1, &d2) in self
             .shape()
@@ -482,18 +478,11 @@ where
             .zip_longest(right.tensor().shape().iter().rev())
             .rev()
         {
-            let dim;
-            match pair {
-                Both(&l, &r) => {
-                    dim = max(l, r);
-                }
-                Left(&l) => {
-                    dim = l;
-                }
-                Right(&r) => {
-                    dim = r;
-                }
-            }
+            let dim = match pair {
+                Both(&l, &r) => max(l, r),
+                Left(&l) => l,
+                Right(&r) => r,
+            };
             max_shape.push(dim);
         }
         let index_vec = vec![0; length];
@@ -503,18 +492,11 @@ where
             carry: Default::default(),
         };
         let mut result = Tensor::new_with_filler(max_shape.clone(), T::zero());
-        // println!("max_shape={:?}", max_shape);
-        // println!("result={:?}", result.clone());
-        // println!("result.array.len()={}", result.array.len());
         for idx in index_iter {
             let v = self[&idx] + *(*right).get(&idx).unwrap();
-            // println!(
-            // "idx={:?}, l={:?}, r={:?}, v={v:?}",
-            // idx.clone(),
-            // self[&idx],
-            // *(*right).get(&idx).unwrap()
-            // );
-            result.set(&idx, v);
+            if let Err(e) = result.set(&idx, v) {
+                panic!("{}", e)
+            }
         }
         result
     }
@@ -548,9 +530,9 @@ impl Iterator for IndexIterator {
     }
 }
 
-fn reset_trailing_indices(index: &mut Vec<usize>, position: usize) {
-    for i in (position + 1)..index.len() {
-        index[i] = 0;
+fn reset_trailing_indices(index: &mut [usize], position: usize) {
+    for idx in index.iter_mut().skip(position + 1) {
+        *idx = 0;
     }
 }
 
@@ -588,6 +570,6 @@ where
         if self.shape.len() == 1 {
             return self.dot(right);
         }
-        return self.bmm(right);
+        self.bmm(right)
     }
 }

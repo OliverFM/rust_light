@@ -21,8 +21,8 @@ where
         let y = &self.weights * batch;
         println!("y.shape()={:?}", y.shape());
         println!("bias.shape()={:?}", self.bias.shape());
-        let y = &y + &self.bias;
-        y
+
+        &y + &self.bias
     }
 }
 
