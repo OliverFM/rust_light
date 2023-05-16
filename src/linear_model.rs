@@ -1,10 +1,8 @@
-use super::tensor::{Tensor, TensorLike};
-use num::PrimInt;
-use std::ops::{Add, Mul};
+use super::tensor::{Numeric, Tensor, TensorLike};
 
 pub struct LinearLayer<T>
 where
-    T: PrimInt + Copy + Clone + Mul + Add + std::fmt::Debug,
+    T: Numeric,
 {
     weights: Tensor<T>,
     bias: Tensor<T>,
@@ -12,7 +10,7 @@ where
 
 impl<T> LinearLayer<T>
 where
-    T: PrimInt + Copy + Clone + Mul + Add + std::fmt::Debug,
+    T: Numeric,
 {
     pub fn forward<U>(&self, batch: &U) -> Tensor<T>
     where

@@ -4,7 +4,7 @@ use std::cmp::max;
 use std::convert::From;
 use std::ops::{Add, Index, Mul};
 
-trait Numeric: Zero + One + Copy + Clone + Mul + Add + std::fmt::Debug {}
+pub trait Numeric: Zero + One + Copy + Clone + Mul + Add + std::fmt::Debug {}
 
 // https://stackoverflow.com/questions/42381185/specifying-generic-parameter-to-belong-to-a-small-set-of-types
 macro_rules! numeric_impl {
@@ -20,7 +20,7 @@ numeric_impl!(usize, u8, u32, u64, u128, i8, i32, i64, i128, f32, f64);
 #[derive(Debug, PartialEq, Clone)]
 pub struct Tensor<T>
 where
-    T: Zero + One + Copy + Clone + Mul + Add + std::fmt::Debug,
+    T: Numeric,
 {
     array: Vec<T>, // later on, I will need unsafe code to replace this with a statically sized type
     shape: Vec<usize>, // TODO: convert to let this be a slice
@@ -28,7 +28,7 @@ where
 
 impl<T> From<T> for Tensor<T>
 where
-    T: Zero + One + Copy + Clone + Mul + Add + std::fmt::Debug,
+    T: Numeric,
 {
     fn from(value: T) -> Self {
         Tensor {
@@ -71,7 +71,7 @@ where
 #[derive(Debug, PartialEq, Clone)]
 pub struct TensorView<'a, T>
 where
-    T: Zero + One + Copy + Clone + Mul + Add + std::fmt::Debug,
+    T: Numeric,
 {
     // TODO: convert this to look at slices of tensors. e.g. tensor[..1]
     tensor: &'a Tensor<T>,
@@ -81,7 +81,7 @@ where
 #[derive(Debug, PartialEq, Clone)]
 pub struct FrozenTensorView<'a, T>
 where
-    T: Zero + One + Copy + Clone + Mul + Add + std::fmt::Debug,
+    T: Numeric,
 {
     tensor: &'a Tensor<T>,
     shape: &'a Vec<usize>, // TODO: convert to let this be a slice
@@ -89,7 +89,7 @@ where
 
 impl<T> Tensor<T>
 where
-    T: Zero + One + Copy + Clone + Mul + Add + std::fmt::Debug,
+    T: Numeric,
 {
     fn new_empty(shape: Vec<usize>) -> Tensor<T> {
         let mut total = 1;
@@ -216,7 +216,7 @@ where
 
 impl<T> Index<&Vec<usize>> for Tensor<T>
 where
-    T: Zero + One + Copy + Clone + Mul + Add + std::fmt::Debug,
+    T: Numeric,
 {
     type Output = T;
 
@@ -227,7 +227,7 @@ where
 
 impl<'a, T> TensorLike<'a, T> for Tensor<T>
 where
-    T: Zero + One + Copy + Clone + Mul + Add + std::fmt::Debug,
+    T: Numeric,
 {
     fn shape(&self) -> &Vec<usize> {
         &self.shape
@@ -249,7 +249,7 @@ where
 // a borrowed Tensor, but with a new shape.
 impl<'a, T> TensorView<'a, T>
 where
-    T: Zero + One + Copy + Clone + Mul + Add + std::fmt::Debug,
+    T: Numeric,
 {
     pub fn to_tensor(&self) -> Tensor<T> {
         (*self.tensor).clone()
@@ -265,7 +265,7 @@ where
 
 impl<'a, T> FrozenTensorView<'a, T>
 where
-    T: Zero + One + Copy + Clone + Mul + Add + std::fmt::Debug,
+    T: Numeric,
 {
     pub fn to_tensor(&self) -> Tensor<T> {
         (*self.tensor).clone()
@@ -285,7 +285,7 @@ where
 
 pub trait TensorLike<'a, T>
 where
-    T: Zero + One + Copy + Clone + Mul + Add + std::fmt::Debug,
+    T: Numeric,
 {
     fn get(&self, index: &Vec<usize>) -> Result<&T, String> {
         (*self.tensor()).get(index)
@@ -446,7 +446,7 @@ where
 // TODO: figure out how to get scalar multiplication with correct typing
 // impl<T> Add<T> for &Tensor<T>
 // where
-// T: Zero + One + Copy + Clone + Mul + Add + std::fmt::Debug,
+// T: Numeric,
 // {
 // type Output = Tensor<T>;
 // fn add(self, right: T) -> Tensor<T> {
@@ -459,7 +459,7 @@ where
 
 impl<T, U> Add<&U> for &Tensor<T>
 where
-    T: Zero + One + Copy + Clone + Mul + Add + std::fmt::Debug,
+    T: Numeric,
     U: for<'b> TensorLike<'b, T>,
 {
     type Output = Tensor<T>;
@@ -570,7 +570,7 @@ fn test_index_iterator() {
 
 impl<T, U> Mul<&U> for &Tensor<T>
 where
-    T: Zero + One + Copy + Clone + Mul + Add + std::fmt::Debug,
+    T: Numeric,
     U: for<'b> TensorLike<'b, T>,
 {
     type Output = Tensor<T>;
