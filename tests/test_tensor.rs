@@ -1,6 +1,13 @@
 use rust_light::tensor::*;
 
 #[test]
+fn test_from_vec() {
+    let tensor1 = Tensor::from(vec![vec![0, 1, 2], vec![3, 4, 5]]);
+    let tensor2 = Tensor::new((0..6).collect(), vec![2, 3]);
+    assert_eq!(tensor1, tensor2);
+}
+
+#[test]
 fn test_new_with_filler() {
     let vec = Tensor::new_with_filler(vec![4], 4);
     let shape = vec.shape();
@@ -46,11 +53,14 @@ fn test_get_3x3() {
 
 #[test]
 fn test_add_scalar() {
+    let val = 42;
     let tensor1 = Tensor::new((0..32).collect(), vec![2, 4, 4]);
     let tensor2 = Tensor::new((42..(32 + 42)).collect(), vec![2, 4, 4]);
-    let scalar = Tensor::scalar(42);
+    let scalar = Tensor::scalar(val);
     assert_eq!(&tensor1 + &scalar, tensor2);
     assert_eq!(&scalar + &tensor1, tensor2);
+    // assert_eq!(scalar, Tensor::from(val));
+    // assert_eq!(&tensor1 + val, tensor2); // Need to figure out multiple implementations first
 }
 
 #[test]

@@ -1,22 +1,69 @@
 use itertools::{EitherOrBoth::*, Itertools};
 use num::PrimInt;
 use std::cmp::max;
+use std::convert::From;
 use std::ops::{Add, Index, Mul};
+
+trait Numeric: PrimInt + Copy + Clone + Mul + Add + std::fmt::Debug {}
+impl Numeric for i32 {}
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct Tensor<T>
 where
-    T: Copy + Clone,
+    T: PrimInt + Copy + Clone + Mul + Add + std::fmt::Debug,
 {
     array: Box<Vec<T>>, // later on, I will need unsafe code to replace this with a statically sized type
     shape: Vec<usize>,  // TODO: convert to let this be a slice
 }
 
+// impl<T> From<T> for Tensor<T>
+// where
+// T: PrimInt + Copy + Clone + Mul + Add + std::fmt::Debug,
+// {
+// fn from(value: T) -> Self {
+// Tensor {
+// array: Box::new(vec![value]),
+// shape: vec![],
+// }
+// }
+// }
+
+// impl<T, U, const N: usize> From<[U; N]> for Tensor<T>
+// where
+// T: Numeric,
+// Tensor<T>: From<U>,
+// {
+// fn from(value: [U; N]) -> Self {
+// Tensor::from::<Vec<_>>(value.to_vec())
+// }
+// }
+
+impl<T, U> From<Vec<U>> for Tensor<T>
+where
+    T: Numeric,
+    Tensor<T>: From<U>,
+{
+    fn from(value: Vec<U>) -> Tensor<T> {
+        let tensors: Vec<_> = value.into_iter().map(Tensor::from).collect();
+        let (arrays, shapes): (Vec<_>, Vec<_>) =
+            tensors.into_iter().map(|t| (t.array, t.shape)).unzip();
+        let valid = shapes.iter().all(|shape| *shape == shapes[0]);
+        assert!(valid);
+
+        let array = Box::new(arrays.into_iter().flat_map(|arr| arr.into_iter()).collect());
+        let mut shape = vec![shapes.len()];
+        shape.extend_from_slice(&shapes[0]); // TODO: make this more by chaining iterators before so that we have shapes[0] is a dummy value
+        let shape = shape;
+        return Tensor { array, shape };
+    }
+}
+
 #[derive(Debug, PartialEq, Clone)]
 pub struct TensorView<'a, T>
 where
-    T: Copy + Clone,
+    T: PrimInt + Copy + Clone + Mul + Add + std::fmt::Debug,
 {
+    // TODO: convert this to look at slices of tensors. e.g. tensor[..1]
     tensor: &'a Tensor<T>,
     shape: Vec<usize>, // TODO: convert to let this be a slice
 }
@@ -24,7 +71,7 @@ where
 #[derive(Debug, PartialEq, Clone)]
 pub struct FrozenTensorView<'a, T>
 where
-    T: Copy + Clone,
+    T: PrimInt + Copy + Clone + Mul + Add + std::fmt::Debug,
 {
     tensor: &'a Tensor<T>,
     shape: &'a Vec<usize>, // TODO: convert to let this be a slice
@@ -391,19 +438,14 @@ where
 }
 
 // TODO: figure out how to get scalar multiplication with correct typing
-// impl<T: Add<Rhs = &T>> Add for &Tensor<T>
+// impl<T> Add<T> for &Tensor<T>
 // where
 // T: PrimInt + Copy + Clone + Mul + Add + std::fmt::Debug,
 // {
 // type Output = Tensor<T>;
-// fn add(self, right: &T) -> Tensor<T> {
+// fn add(self, right: T) -> Tensor<T> {
 // Tensor::new(
-// self.array
-// .iter()
-// .apply(|x| {
-// x + 1;
-// })
-// .collect(),
+// self.array.iter().map(|x| *x + right).collect(),
 // self.shape.clone(),
 // )
 // }
