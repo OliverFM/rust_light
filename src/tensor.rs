@@ -77,7 +77,7 @@ where
     }
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, Clone)]
 pub struct TensorView<'a, T>
 where
     T: Numeric,
@@ -237,10 +237,11 @@ where
     }
 }
 
-impl<'a, T> TensorLike<'a, T> for Tensor<T>
+impl<'a, T> TensorLike<'a> for Tensor<T>
 where
     T: Numeric,
 {
+    type Elem = T;
     fn shape(&self) -> &Vec<usize> {
         &self.shape
     }
@@ -275,10 +276,11 @@ where
     }
 }
 
-impl<'a, T> TensorLike<'a, T> for TensorView<'a, T>
+impl<'a, T> TensorLike<'a> for TensorView<'a, T>
 where
     T: Numeric,
 {
+    type Elem = T;
     fn shape(&self) -> &Vec<usize> {
         &self.shape
     }
@@ -359,7 +361,7 @@ pub trait TensorLike<'a> {
     {
         //! generalised dot product: returns to acculumulated sum of the elementwise product.
         assert!(self.same_shape(other));
-        let mut result = T::zero();
+        let mut result = Self::Elem::zero();
         for i in 0..self.tensor().array.len() {
             result = result + self.tensor().array[i] * other.tensor().array[i];
         }
@@ -482,17 +484,16 @@ pub trait TensorLike<'a> {
     // }
     // }
 }
-/*
-impl<U, T> PartialEq<U> for U
+
+impl<'a, U, T> PartialEq<U> for TensorView<'a, T>
 where
     T: Numeric,
-    U: for<'a> TensorLike<'a, T>,
+    U: for<'b> TensorLike<'b, Elem = T>,
 {
     fn eq(&self, other: &U) -> bool {
         false
     }
 }
-*/
 
 // TODO: figure out how to get scalar multiplication with correct typing
 // impl<T> Add<T> for &Tensor<T>
@@ -511,7 +512,7 @@ where
 impl<T, U> Add<&U> for &Tensor<T>
 where
     T: Numeric,
-    U: for<'b> TensorLike<'b, T = T>,
+    U: for<'b> TensorLike<'b, Elem = T>,
 {
     type Output = Tensor<T>;
 
@@ -622,7 +623,7 @@ fn test_index_iterator() {
 impl<T, U> Mul<&U> for &Tensor<T>
 where
     T: Numeric,
-    U: for<'b> TensorLike<'b, T>,
+    U: for<'b> TensorLike<'b, Elem = T>,
 {
     type Output = Tensor<T>;
 
