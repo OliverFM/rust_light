@@ -1,10 +1,28 @@
 use itertools::{EitherOrBoth::*, Itertools};
 use num::{One, Zero};
-use std::cmp::max;
+use std::cmp::{max, PartialEq};
 use std::convert::From;
 use std::ops::{Add, Index, Mul};
+use std::ops::{RangeBounds, RangeFrom, RangeFull};
 
-pub trait Numeric: Zero + One + Copy + Clone + Mul + Add + std::fmt::Debug {}
+pub trait Numeric: Zero + One + Copy + Clone + Mul + Add + PartialEq + std::fmt::Debug {}
+
+#[derive(Debug, PartialEq, Clone)]
+pub struct SliceRange {
+    start: usize,
+    end: usize,  // TODO: figure out how to make this optional
+    skip: usize, // TODO: add this
+}
+
+impl SliceRange {
+    pub fn new(start: usize, end: usize) -> SliceRange {
+        SliceRange {
+            start,
+            end,
+            skip: 0,
+        }
+    }
+}
 
 // https://stackoverflow.com/questions/42381185/specifying-generic-parameter-to-belong-to-a-small-set-of-types
 macro_rules! numeric_impl {
@@ -17,6 +35,7 @@ macro_rules! numeric_impl {
 
 numeric_impl!(usize, u8, u32, u64, u128, i8, i32, i64, i128, f32, f64);
 
+/// The core `struct` in this library.
 #[derive(Debug, PartialEq, Clone)]
 pub struct Tensor<T>
 where
@@ -38,16 +57,6 @@ where
     }
 }
 
-// impl<T, U, const N: usize> From<[U; N]> for Tensor<T>
-// where
-// T: Numeric,
-// Tensor<T>: From<U>,
-// {
-// fn from(value: [U; N]) -> Self {
-// Tensor::from::<Vec<_>>(value.to_vec())
-// }
-// }
-
 impl<T, U> From<Vec<U>> for Tensor<T>
 where
     T: Numeric,
@@ -58,7 +67,7 @@ where
         let (arrays, shapes): (Vec<_>, Vec<_>) =
             tensors.into_iter().map(|t| (t.array, t.shape)).unzip();
         let valid = shapes.iter().all(|shape| *shape == shapes[0]);
-        assert!(valid);
+        assert!(valid); // TODO: get rid of the assertion, this method should never fail. Try TryFrom instead
 
         let array = arrays.into_iter().flat_map(|arr| arr.into_iter()).collect();
         let mut shape = vec![shapes.len()];
@@ -75,7 +84,8 @@ where
 {
     // TODO: convert this to look at slices of tensors. e.g. tensor[..1]
     tensor: &'a Tensor<T>,
-    shape: Vec<usize>, // TODO: convert to let this be a slice
+    shape: Vec<usize>,
+    offset: Vec<SliceRange>,
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -91,6 +101,34 @@ impl<T> Tensor<T>
 where
     T: Numeric,
 {
+    fn get_global_index(&self, index: &Vec<usize>) -> Result<usize, String> {
+        if index.len() < self.shape().len() {
+            return Err(format!(
+                "shapes do not match: self.shape={:?}, index={:?}
+                Need index to be at least as long as shape.",
+                self.shape, index,
+            ));
+        }
+        let mut global_idx = 0;
+        let mut multiplier = 1;
+        for (i, (&dim, &idx_dim)) in self.shape.iter().rev().zip(index.iter().rev()).enumerate() {
+            if dim == 1 {
+                // we pick the 0th element during broadcasting
+                continue;
+            }
+            if dim <= idx_dim {
+                return Err(format!(
+                    "shape do not match -- &TensorView has dimension:\n{:?}\nindex is:\n{:?}\nthe {}th position is out-of-bounds!",
+                    self.shape,
+                    index,
+                    i,
+                ));
+            }
+            global_idx += idx_dim * multiplier;
+            multiplier *= dim;
+        }
+        Ok(global_idx)
+    }
     fn new_empty(shape: Vec<usize>) -> Tensor<T> {
         let mut total = 1;
         for &dim in shape.iter() {
@@ -133,25 +171,38 @@ where
         assert_eq!(len, array.len());
         Tensor { array, shape }
     }
-    // pub fn from_tensor(tensor: &'a Tensor<T>, shape: Vec<usize>) -> TensorView<'a, T> {
-    // &FrozenTensorView { tensor, shape }
+
+    pub fn view(&self, shape: Vec<SliceRange>) -> TensorView<'_, T> {
+        TensorView {
+            tensor: self,
+            offset: shape.clone(),
+            shape: self.shape.clone(), // TODO: fix this
+        }
+    }
+
+    // TODO: deprecate
+    // pub fn to_view(&self) -> TensorView<'_, T> {
+    // TensorView {
+    // tensor: self,
+    // shape: self.shape.clone(),
+    // offset: self.shape.clone(),
     // }
-    pub fn view(&self, shape: Vec<usize>) -> TensorView<'_, T> {
-        TensorView {
-            tensor: self,
-            shape,
-        }
-    }
-    pub fn to_view(&self) -> TensorView<'_, T> {
-        TensorView {
-            tensor: self,
-            shape: self.shape.clone(),
-        }
-    }
+    // }
+
     pub fn freeze(&self) -> FrozenTensorView<'_, T> {
         FrozenTensorView {
             tensor: self,
             shape: &self.shape,
+        }
+    }
+
+    fn set(&mut self, index: &Vec<usize>, value: T) -> Result<(), String> {
+        match self.get_global_index(index) {
+            Ok(global_idx) => {
+                self.array[global_idx] = value;
+                Ok(())
+            }
+            Err(e) => Err(e),
         }
     }
 
@@ -172,45 +223,6 @@ where
             Ok(global_idx) => Ok(&self.array[global_idx]),
             Err(e) => Err(e),
         }
-    }
-
-    fn set(&mut self, index: &Vec<usize>, value: T) -> Result<(), String> {
-        match self.get_global_index(index) {
-            Ok(global_idx) => {
-                self.array[global_idx] = value;
-                Ok(())
-            }
-            Err(e) => Err(e),
-        }
-    }
-
-    fn get_global_index(&self, index: &Vec<usize>) -> Result<usize, String> {
-        if index.len() < self.shape().len() {
-            return Err(format!(
-                "shapes do not match: self.shape={:?}, index={:?}
-                Need index to be at least as long as shape.",
-                self.shape, index,
-            ));
-        }
-        let mut global_idx = 0;
-        let mut multiplier = 1;
-        for (i, (&dim, &idx_dim)) in self.shape.iter().rev().zip(index.iter().rev()).enumerate() {
-            if dim == 1 {
-                // we pick the 0th element during broadcasting
-                continue;
-            }
-            if dim <= idx_dim {
-                return Err(format!(
-                    "shape do not match -- &TensorView has dimension:\n{:?}\nindex is:\n{:?}\nthe {}th position is out-of-bounds!",
-                    self.shape,
-                    index,
-                    i,
-                ));
-            }
-            global_idx += idx_dim * multiplier;
-            multiplier *= dim;
-        }
-        Ok(global_idx)
     }
 }
 
@@ -263,6 +275,28 @@ where
     }
 }
 
+impl<'a, T> TensorLike<'a, T> for TensorView<'a, T>
+where
+    T: Numeric,
+{
+    fn shape(&self) -> &Vec<usize> {
+        &self.shape
+    }
+
+    fn tensor(&self) -> &Tensor<T> {
+        self.tensor
+    }
+
+    fn to_tensor(&self) -> Tensor<T> {
+        // self.tensor.clone()
+        todo!();
+    }
+
+    fn get(&self, index: &Vec<usize>) -> Result<&T, String> {
+        todo!();
+    }
+}
+
 impl<'a, T> FrozenTensorView<'a, T>
 where
     T: Numeric,
@@ -283,21 +317,27 @@ where
     }
 }
 
-pub trait TensorLike<'a, T>
-where
-    T: Numeric,
-{
-    fn get(&self, index: &Vec<usize>) -> Result<&T, String> {
+pub trait TensorLike<'a> {
+    type Elem: Numeric;
+    fn get(&self, index: &Vec<usize>) -> Result<&Self::Elem, String> {
         (*self.tensor()).get(index)
     }
 
     fn shape(&self) -> &Vec<usize>;
 
-    fn tensor(&self) -> &Tensor<T>;
+    fn tensor(&self) -> &Tensor<Self::Elem>;
 
-    fn to_tensor(&self) -> Tensor<T>;
+    fn to_tensor(&self) -> Tensor<Self::Elem>;
 
-    fn left_scalar_multiplication(&self, &scalar: &T) -> Tensor<T> {
+    fn slice(&self, offset: Vec<SliceRange>) -> TensorView<Self::Elem> {
+        TensorView {
+            tensor: self.tensor(),
+            shape: self.shape().clone(),
+            offset,
+        }
+    }
+
+    fn left_scalar_multiplication(&self, &scalar: &Self::Elem) -> Tensor<Self::Elem> {
         let mut result = Tensor::new_empty((*self.shape()).clone());
         for &elem in self.tensor().array.iter() {
             result.array.push(scalar * elem);
@@ -305,7 +345,7 @@ where
         result
     }
 
-    fn right_scalar_multiplication(&self, &scalar: &T) -> Tensor<T> {
+    fn right_scalar_multiplication(&self, &scalar: &Self::Elem) -> Tensor<Self::Elem> {
         let mut result = Tensor::new_empty((*self.shape()).clone());
         for &elem in self.tensor().array.iter() {
             result.array.push(elem * scalar);
@@ -313,9 +353,9 @@ where
         result
     }
 
-    fn dot<U>(&self, other: &U) -> Tensor<T>
+    fn dot<U>(&self, other: &U) -> Tensor<Self::Elem>
     where
-        U: for<'b> TensorLike<'b, T>,
+        U: for<'b> TensorLike<'b, Elem = Self::Elem>,
     {
         //! generalised dot product: returns to acculumulated sum of the elementwise product.
         assert!(self.same_shape(other));
@@ -345,9 +385,9 @@ where
     /// assert_eq!(r, Tensor::new(vec![1, 5], shape.clone()));
     /// assert_eq!(matrix.bmm(&e1), Tensor::new(vec![1, 3], shape.clone()));
     /// ```
-    fn bmm<U>(&self, right: &U) -> Tensor<T>
+    fn bmm<U>(&self, right: &U) -> Tensor<Self::Elem>
     where
-        U: for<'b> TensorLike<'b, T>,
+        U: for<'b> TensorLike<'b, Elem = Self::Elem>,
     {
         assert!(2 <= self.shape().len() && self.shape().len() <= 3); // For now we can only do Batch matrix
         assert!(right.shape().len() == 2); // rhs must be a matrix
@@ -376,7 +416,7 @@ where
                 self_index[self_index_len - 2] = i;
                 for j in 0..result.shape[2] {
                     right_index[1] = j;
-                    let mut val = T::zero();
+                    let mut val = Self::Elem::zero();
                     for k in 0..right.shape()[0] {
                         self_index[self_index_len - 1] = k;
                         right_index[0] = k;
@@ -411,7 +451,7 @@ where
 
     fn same_shape<U>(&self, other: &U) -> bool
     where
-        U: for<'b> TensorLike<'b, T>,
+        U: for<'b> TensorLike<'b, Elem = Self::Elem>,
     {
         self.shape() == other.shape()
     }
@@ -442,6 +482,17 @@ where
     // }
     // }
 }
+/*
+impl<U, T> PartialEq<U> for U
+where
+    T: Numeric,
+    U: for<'a> TensorLike<'a, T>,
+{
+    fn eq(&self, other: &U) -> bool {
+        false
+    }
+}
+*/
 
 // TODO: figure out how to get scalar multiplication with correct typing
 // impl<T> Add<T> for &Tensor<T>
@@ -460,7 +511,7 @@ where
 impl<T, U> Add<&U> for &Tensor<T>
 where
     T: Numeric,
-    U: for<'b> TensorLike<'b, T>,
+    U: for<'b> TensorLike<'b, T = T>,
 {
     type Output = Tensor<T>;
 

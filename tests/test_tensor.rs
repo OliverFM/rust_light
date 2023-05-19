@@ -1,6 +1,23 @@
 use rust_light::tensor::*;
 
 #[test]
+fn test_slicing() {
+    let tensor1 = Tensor::from(vec![vec![0, 1, 2], vec![3, 4, 5]]);
+    let tensor2 = Tensor::from(vec![vec![1, 2], vec![4, 5]]);
+    println!(
+        "{:?}\n{:?}",
+        tensor1.slice(vec![SliceRange::new(0, 1), SliceRange::new(1, 2),]),
+        tensor2.slice(vec![SliceRange::new(0, 1), SliceRange::new(0, 1),])
+    );
+    // assert_eq!(tensor1.slice(vec![.., 1..]), tensor2.slice(vec![.., ..]));
+    //
+    assert_ne!(
+        tensor1.slice(vec![SliceRange::new(0, 1), SliceRange::new(0, 1),]),
+        tensor1.slice(vec![SliceRange::new(0, 2), SliceRange::new(0, 1),])
+    );
+}
+
+#[test]
 fn test_from_vec() {
     let tensor1 = Tensor::from(vec![vec![0, 1, 2], vec![3, 4, 5]]);
     let tensor2 = Tensor::new((0..6).collect(), vec![2, 3]);
@@ -92,7 +109,7 @@ fn test_creation() {
 #[test]
 fn test_bmm_2x2() {
     let v = vec![0, 1, 2, 3];
-    let matrix = Tensor::new(v, vec![2, 2]);
+    let matrix = Tensor::new(v, vec![2, 2]); // [[0,1],[2,3]]
     let shape = vec![2, 1];
     let e1 = Tensor::new(vec![0, 1], vec![2, 1]);
     let e2 = Tensor::new(vec![1, 0], vec![2, 1]);
