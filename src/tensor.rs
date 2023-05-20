@@ -216,7 +216,7 @@ where
     pub fn view(&self, shape: Vec<SliceRange>) -> TensorView<'_, T> {
         TensorView {
             tensor: self,
-            offset: shape.clone(),
+            offset: shape,
             shape: self.shape.clone(), // TODO: fix this
         }
     }
