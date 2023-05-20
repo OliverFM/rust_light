@@ -25,7 +25,6 @@ fn test_slicing() {
     assert_ne!(slice1, slice2);
 }
 
-/*
 // #[ignore]
 #[test]
 fn test_from_vec() {
@@ -149,4 +148,3 @@ fn test_right_scalar_multiplication() {
         Tensor::new(vec![42, 42, 42, 42], vec![4])
     );
 }
-*/
