@@ -1,11 +1,23 @@
+use crate::tensor::utils::{IndexIterator, Numeric};
+use crate::tensor::*;
 use itertools::{EitherOrBoth::*, Itertools};
 use num::{One, Zero};
 use std::cmp::{max, PartialEq};
 use std::convert::From;
 use std::ops::{Add, Index, Mul};
+
 // use std::ops::{RangeBounds, RangeFrom, RangeFull};
 
-pub trait Numeric: Zero + One + Copy + Clone + Mul + Add + PartialEq + std::fmt::Debug {}
+#[derive(Debug, Clone)]
+pub struct TensorView<'a, T>
+where
+    T: Numeric,
+{
+    // TODO: convert this to look at slices of tensors. e.g. tensor[..1]
+    tensor: &'a Tensor<T>,
+    shape: Vec<usize>,
+    offset: Vec<SliceRange>,
+}
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct SliceRange {
@@ -24,24 +36,13 @@ impl SliceRange {
     }
 }
 
-// https://stackoverflow.com/questions/42381185/specifying-generic-parameter-to-belong-to-a-small-set-of-types
-macro_rules! numeric_impl {
-    ($($t: ty),+) => {
-        $(
-            impl Numeric for $t {}
-        )+
-    }
-}
-
-numeric_impl!(usize, u8, u32, u64, u128, i8, i32, i64, i128, f32, f64);
-
 /// The core `struct` in this library.
 #[derive(Debug, PartialEq, Clone)]
 pub struct Tensor<T>
 where
     T: Numeric,
 {
-    array: Vec<T>, // later on, I will need unsafe code to replace this with a statically sized type
+    pub array: Vec<T>, // later on, I will need unsafe code to replace this with a statically sized type
     shape: Vec<usize>, // TODO: convert to let this be a slice
 }
 
@@ -77,18 +78,6 @@ where
     }
 }
 
-// #[derive(Debug, PartialEq, Clone)]
-#[derive(Debug, Clone)]
-pub struct TensorView<'a, T>
-where
-    T: Numeric,
-{
-    // TODO: convert this to look at slices of tensors. e.g. tensor[..1]
-    tensor: &'a Tensor<T>,
-    shape: Vec<usize>,
-    offset: Vec<SliceRange>,
-}
-
 #[derive(Debug, PartialEq, Clone)]
 pub struct FrozenTensorView<'a, T>
 where
@@ -102,7 +91,8 @@ impl<T> Tensor<T>
 where
     T: Numeric,
 {
-    fn get_global_index(
+    // TODO: make private
+    pub fn get_global_index(
         &self,
         index: &Vec<usize>,
         offset: Option<&Vec<SliceRange>>,
@@ -267,22 +257,16 @@ where
         }
     }
 
-    fn get_with_offset(&self, index: &Vec<usize>, offset: &Vec<SliceRange>) -> Result<&T, String> {
+    // TODO: make private
+    pub fn get_with_offset(
+        &self,
+        index: &Vec<usize>,
+        offset: &Vec<SliceRange>,
+    ) -> Result<&T, String> {
         match self.get_global_index(index, Some(offset)) {
             Ok(global_idx) => Ok(&self.array[global_idx]),
             Err(e) => Err(e),
         }
-    }
-}
-
-impl<'a, T> Index<&Vec<usize>> for TensorView<'a, T>
-where
-    T: Numeric,
-{
-    type Output = T;
-
-    fn index(&self, index: &Vec<usize>) -> &Self::Output {
-        self.tensor.get_with_offset(index, &self.offset).unwrap()
     }
 }
 
@@ -315,51 +299,6 @@ where
     }
     fn to_tensor(&self) -> Tensor<T> {
         self.clone()
-    }
-}
-
-// TODO: implement views
-// a borrowed Tensor, but with a new shape.
-impl<'a, T> TensorView<'a, T>
-where
-    T: Numeric,
-{
-    pub fn to_tensor(&self) -> Tensor<T> {
-        (*self.tensor).clone()
-    }
-
-    pub fn freeze(&self) -> FrozenTensorView<'_, T> {
-        FrozenTensorView {
-            tensor: self.tensor,
-            shape: &self.shape,
-        }
-    }
-}
-
-impl<'a, T> TensorLike<'a> for TensorView<'a, T>
-where
-    T: Numeric,
-{
-    type Elem = T;
-    fn shape(&self) -> &Vec<usize> {
-        &self.shape
-    }
-
-    fn tensor(&self) -> &Tensor<T> {
-        self.tensor
-    }
-
-    fn to_tensor(&self) -> Tensor<T> {
-        // self.tensor.clone()
-        todo!();
-    }
-
-    fn get(&self, index: &Vec<usize>) -> Result<&T, String> {
-        let idx = self
-            .tensor
-            .get_global_index(index, Some(&self.offset))
-            .unwrap();
-        Ok(&self.tensor.array[idx])
     }
 }
 
@@ -548,47 +487,7 @@ pub trait TensorLike<'a> {
     // }
 
     fn iter_elements<U>(&self) -> IndexIterator {
-        IndexIterator {
-            index: vec![0; self.shape().len()],
-            dimensions: self.shape().clone(),
-            carry: Default::default(),
-        }
-    }
-}
-
-impl<'a, T, U> PartialEq<U> for TensorView<'a, T>
-where
-    T: Numeric,
-    U: TensorLike<'a, Elem = T>,
-{
-    fn eq(&self, other: &U) -> bool {
-        // println!(
-        // "self.shape={:?}, other.shape={:?}",
-        // self.shape.clone(),
-        // other.shape().clone()
-        // );
-        if other.shape() != &self.shape {
-            return false;
-        }
-        let index_iter = IndexIterator {
-            index: vec![0; self.shape.len()],
-            dimensions: self.shape.clone(),
-            carry: Default::default(),
-        };
-
-        for idx in index_iter {
-            // println!(
-            // "self[{:?}]={:?}, other[{:?}]={:?}",
-            // idx.clone(),
-            // self.get(&idx),
-            // idx.clone(),
-            // other.get(&idx)
-            // );
-            if self.get(&idx) != other.get(&idx) {
-                return false;
-            }
-        }
-        true
+        IndexIterator::new(self.shape().clone())
     }
 }
 
@@ -644,12 +543,7 @@ where
             };
             max_shape.push(dim);
         }
-        let index_vec = vec![0; length];
-        let index_iter = IndexIterator {
-            index: index_vec,
-            dimensions: max_shape.clone(),
-            carry: Default::default(),
-        };
+        let index_iter = IndexIterator::new(max_shape.clone());
         let mut result = Tensor::new_with_filler(max_shape.clone(), T::zero());
         for idx in index_iter {
             let v = self[&idx] + *(*right).get(&idx).unwrap();
@@ -658,50 +552,6 @@ where
             }
         }
         result
-    }
-}
-
-// TODO: figure out how to make this hold references with two lifetimes, and get the iterator to return a reference
-#[derive(Default)]
-pub struct IndexIterator {
-    index: Vec<usize>,
-    dimensions: Vec<usize>,
-    carry: usize,
-}
-
-impl IndexIterator {
-    pub fn new(dimensions: Vec<usize>) -> IndexIterator {
-        IndexIterator {
-            index: vec![0; dimensions.len()],
-            dimensions,
-            carry: Default::default(),
-        }
-    }
-}
-
-impl Iterator for IndexIterator {
-    type Item = Vec<usize>;
-    fn next(&mut self) -> Option<Self::Item> {
-        for i in (0..self.index.len()).rev() {
-            let v = self.index[i];
-            let dim = self.dimensions[i];
-            while v < dim - 1 && self.carry > 0 {
-                self.index[i] = v + 1;
-                self.carry -= 1;
-            }
-            if self.carry == 0 {
-                reset_trailing_indices(&mut self.index, i);
-                self.carry = 1; // for next iteration
-                return Some(self.index.clone());
-            }
-        }
-        None
-    }
-}
-
-fn reset_trailing_indices(index: &mut [usize], position: usize) {
-    for idx in index.iter_mut().skip(position + 1) {
-        *idx = 0;
     }
 }
 
