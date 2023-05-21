@@ -4,20 +4,40 @@ use rust_light::tensor::*;
 fn test_slicing() {
     let tensor1 = Tensor::from(vec![vec![0, 1, 2], vec![3, 4, 5]]);
     let tensor2 = Tensor::from(vec![vec![1, 2], vec![4, 5]]);
-    return
     println!(
         "{:?}\n{:?}",
-        tensor1.slice(vec![SliceRange::new(0, 1), SliceRange::new(1, 2),]),
-        tensor2.slice(vec![SliceRange::new(0, 1), SliceRange::new(0, 1),])
+        tensor1.slice(vec![SliceRange::new(0, 2), SliceRange::new(1, 3),]),
+        tensor2.slice(vec![SliceRange::new(0, 2), SliceRange::new(0, 2),])
     );
+    assert_eq!(
+        tensor1.slice(vec![SliceRange::new(0, 2), SliceRange::new(1, 3),]),
+        tensor2.slice(vec![SliceRange::new(0, 2), SliceRange::new(0, 2),])
+    );
+
     // assert_eq!(tensor1.slice(vec![.., 1..]), tensor2.slice(vec![.., ..]));
-    //
-    assert_ne!(
-        tensor1.slice(vec![SliceRange::new(0, 1), SliceRange::new(0, 1),]),
-        tensor1.slice(vec![SliceRange::new(0, 2), SliceRange::new(0, 1),])
+    // let slice0 = tensor1.slice(vec![SliceRange::new(0, 2), SliceRange::new(1, 2)]);
+    let slice1 = tensor1.slice(vec![SliceRange::new(0, 2), SliceRange::new(1, 3)]);
+    let slice2 = tensor1.slice(vec![SliceRange::new(0, 2), SliceRange::new(0, 3)]);
+
+    println!("Slice: {:?}", slice1);
+    println!("Slice[&vec![0,0,0]]= {:?}", slice1[&vec![0, 0]]);
+    assert_eq!(slice1[&vec![0, 0]], 1);
+    assert_ne!(slice1, slice2);
+
+    let tensor = Tensor::new((0..32).collect(), vec![2, 4, 4]);
+    let slice = tensor.slice(vec![
+        SliceRange::new(1, 2),
+        SliceRange::new(2, 3),
+        SliceRange::new(1, 4),
+    ]);
+    assert_eq!(slice.shape(), &vec![1, 1, 3]);
+    assert_eq!(
+        slice,
+        Tensor::from([[[25, 26, 27].to_vec()].to_vec()].to_vec())
     );
 }
 
+// #[ignore]
 #[test]
 fn test_from_vec() {
     let tensor1 = Tensor::from(vec![vec![0, 1, 2], vec![3, 4, 5]]);
@@ -25,6 +45,7 @@ fn test_from_vec() {
     assert_eq!(tensor1, tensor2);
 }
 
+// #[ignore]
 #[test]
 fn test_new_with_filler() {
     let vec = Tensor::new_with_filler(vec![4], 4);
@@ -33,6 +54,7 @@ fn test_new_with_filler() {
     assert_eq!(vec.get(&vec![0]).unwrap(), &4);
 }
 
+// #[ignore]
 #[test]
 fn test_get_2x2x2() {
     let matrix = Tensor::new(vec![0, 1, 2, 3, 4, 5, 6, 7], vec![2, 2, 2]);
@@ -41,6 +63,7 @@ fn test_get_2x2x2() {
     assert_eq!(*matrix.get(&vec![1, 1, 1]).unwrap(), 7);
 }
 
+// #[ignore]
 #[test]
 fn test_get_3x3x4() {
     let matrix = Tensor::new((0..(3 * 3 * 4)).collect(), vec![3, 3, 4]);
@@ -48,6 +71,7 @@ fn test_get_3x3x4() {
     assert_eq!(*matrix.get(&vec![2, 2, 3]).unwrap(), 3 * 3 * 4 - 1);
 }
 
+// #[ignore]
 #[test]
 fn test_get_3x3() {
     let matrix = Tensor::new(vec![0, 1, 2, 3, 4, 5, 6, 7, 8], vec![3, 3]);
@@ -69,6 +93,7 @@ fn test_get_3x3() {
     assert_eq!(matrix.get(&vec![2, 2]).unwrap(), &8);
 }
 
+// #[ignore]
 #[test]
 fn test_add_scalar() {
     let val = 42;
@@ -81,6 +106,7 @@ fn test_add_scalar() {
     // assert_eq!(&tensor1 + val, tensor2); // Need to figure out multiple implementations first
 }
 
+// #[ignore]
 #[test]
 fn test_add() {
     let tensor1 = Tensor::new_with_filler(vec![4, 4], 1);
@@ -90,6 +116,7 @@ fn test_add() {
     assert_eq!(&tensor1 + &tensor2, tensor3);
 }
 
+// #[ignore]
 #[test]
 fn test_dot() {
     let v = vec![0, 1, 2];
@@ -107,6 +134,7 @@ fn test_creation() {
     assert_eq!(matrix.get(&vec![0, 0]).unwrap(), &0);
 }
 
+// #[ignore]
 #[test]
 fn test_bmm_2x2() {
     let v = vec![0, 1, 2, 3];
@@ -123,11 +151,30 @@ fn test_bmm_2x2() {
     assert_eq!(matrix.bmm(&e2), Tensor::new(vec![0, 2], shape.clone()));
 }
 
+// #[ignore]
 #[test]
 fn test_right_scalar_multiplication() {
     let vec = Tensor::new_with_filler(vec![4], 1);
     assert_eq!(
         vec.right_scalar_multiplication(&42),
         Tensor::new(vec![42, 42, 42, 42], vec![4])
+    );
+}
+
+#[test]
+fn test_index_iterator() {
+    let index_iter = IndexIterator::new(vec![2, 2, 2]);
+    assert_eq!(
+        index_iter.collect::<Vec<_>>(),
+        vec![
+            [0, 0, 0].to_vec(),
+            [0, 0, 1].to_vec(),
+            [0, 1, 0].to_vec(),
+            [0, 1, 1].to_vec(),
+            [1, 0, 0].to_vec(),
+            [1, 0, 1].to_vec(),
+            [1, 1, 0].to_vec(),
+            [1, 1, 1].to_vec(),
+        ]
     );
 }

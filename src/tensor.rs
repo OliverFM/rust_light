@@ -3,7 +3,7 @@ use num::{One, Zero};
 use std::cmp::{max, PartialEq};
 use std::convert::From;
 use std::ops::{Add, Index, Mul};
-use std::ops::{RangeBounds, RangeFrom, RangeFull};
+// use std::ops::{RangeBounds, RangeFrom, RangeFull};
 
 pub trait Numeric: Zero + One + Copy + Clone + Mul + Add + PartialEq + std::fmt::Debug {}
 
@@ -77,6 +77,7 @@ where
     }
 }
 
+// #[derive(Debug, PartialEq, Clone)]
 #[derive(Debug, Clone)]
 pub struct TensorView<'a, T>
 where
@@ -101,8 +102,13 @@ impl<T> Tensor<T>
 where
     T: Numeric,
 {
-    fn get_global_index(&self, index: &Vec<usize>) -> Result<usize, String> {
+    fn get_global_index(
+        &self,
+        index: &Vec<usize>,
+        offset: Option<&Vec<SliceRange>>,
+    ) -> Result<usize, String> {
         if index.len() < self.shape().len() {
+            // TODO: allow this case as long as extra dims are 1.
             return Err(format!(
                 "shapes do not match: self.shape={:?}, index={:?}
                 Need index to be at least as long as shape.",
@@ -111,20 +117,56 @@ where
         }
         let mut global_idx = 0;
         let mut multiplier = 1;
+        // TODO: consider turning this into a fold operation.
         for (i, (&dim, &idx_dim)) in self.shape.iter().rev().zip(index.iter().rev()).enumerate() {
+            // Fix the indexing.  We need to have all the reverses index may be shorter than shape.
+            let i = self.shape.len() - i - 1;
+            let shaped_dim;
+            let shifted_idx;
             if dim == 1 {
                 // we pick the 0th element during broadcasting
                 continue;
             }
-            if dim <= idx_dim {
+            if let Some(range_vec) = offset {
+                // println!("setting offset: {:?}", range_vec.clone());
+                shaped_dim = range_vec[i].end - range_vec[i].start;
+                shifted_idx = range_vec[i].start + idx_dim;
+            } else {
+                shaped_dim = dim;
+                shifted_idx = idx_dim;
+            }
+            if shaped_dim <= idx_dim {
                 return Err(format!(
-                    "shape do not match -- &TensorView has dimension:\n{:?}\nindex is:\n{:?}\nthe {}th position is out-of-bounds!",
+                    "Trying to index too far into the view! -- &TensorView has dimension:
+                    {:?}
+                    Offest{:?}
+                    index is:
+                    {:?}
+                    the {}th position is out-of-bounds!
+                    shaped_dim={shaped_dim}, shifted_idx={shifted_idx}, dim={dim}, idx_dim={idx_dim}",
                     self.shape,
+                    offset,
                     index,
                     i,
                 ));
             }
-            global_idx += idx_dim * multiplier;
+
+            if dim <= shifted_idx {
+                return Err(format!(
+                    "shape do not match -- &TensorView has dimension:
+                    {:?}
+                    Offest{:?}
+                    index is:
+                    {:?}
+                    the {}th position is out-of-bounds!
+                    shaped_dim={shaped_dim}, shifted_idx={shifted_idx}, dim={dim}, idx_dim={idx_dim}",
+                    self.shape,
+                    offset,
+                    index,
+                    i,
+                ));
+            }
+            global_idx += shifted_idx * multiplier;
             multiplier *= dim;
         }
         Ok(global_idx)
@@ -175,7 +217,7 @@ where
     pub fn view(&self, shape: Vec<SliceRange>) -> TensorView<'_, T> {
         TensorView {
             tensor: self,
-            offset: shape.clone(),
+            offset: shape,
             shape: self.shape.clone(), // TODO: fix this
         }
     }
@@ -197,7 +239,7 @@ where
     }
 
     fn set(&mut self, index: &Vec<usize>, value: T) -> Result<(), String> {
-        match self.get_global_index(index) {
+        match self.get_global_index(index, None) {
             Ok(global_idx) => {
                 self.array[global_idx] = value;
                 Ok(())
@@ -219,10 +261,28 @@ where
     /// );
     /// ```
     fn get(&self, index: &Vec<usize>) -> Result<&T, String> {
-        match self.get_global_index(index) {
+        match self.get_global_index(index, None) {
             Ok(global_idx) => Ok(&self.array[global_idx]),
             Err(e) => Err(e),
         }
+    }
+
+    fn get_with_offset(&self, index: &Vec<usize>, offset: &Vec<SliceRange>) -> Result<&T, String> {
+        match self.get_global_index(index, Some(offset)) {
+            Ok(global_idx) => Ok(&self.array[global_idx]),
+            Err(e) => Err(e),
+        }
+    }
+}
+
+impl<'a, T> Index<&Vec<usize>> for TensorView<'a, T>
+where
+    T: Numeric,
+{
+    type Output = T;
+
+    fn index(&self, index: &Vec<usize>) -> &Self::Output {
+        self.tensor.get_with_offset(index, &self.offset).unwrap()
     }
 }
 
@@ -295,7 +355,11 @@ where
     }
 
     fn get(&self, index: &Vec<usize>) -> Result<&T, String> {
-        todo!();
+        let idx = self
+            .tensor
+            .get_global_index(index, Some(&self.offset))
+            .unwrap();
+        Ok(&self.tensor.array[idx])
     }
 }
 
@@ -305,13 +369,6 @@ where
 {
     pub fn to_tensor(&self) -> Tensor<T> {
         (*self.tensor).clone()
-    }
-
-    pub fn get_global(&self, index: usize) -> Option<&T> {
-        if index >= self.tensor.array.len() {
-            return None;
-        }
-        Some(&self.tensor.array[index])
     }
 
     pub fn shape(&self) -> &Vec<usize> {
@@ -332,9 +389,15 @@ pub trait TensorLike<'a> {
     fn to_tensor(&self) -> Tensor<Self::Elem>;
 
     fn slice(&self, offset: Vec<SliceRange>) -> TensorView<Self::Elem> {
+        let mut shape = Vec::with_capacity(offset.len() + 1);
+        for slice_range in offset.iter() {
+            // NOTE: assuming that all intervals are half open, for now.
+            // TODO: add a better parser once I have generalised this
+            shape.push(slice_range.end - slice_range.start);
+        }
         TensorView {
             tensor: self.tensor(),
-            shape: self.shape().clone(),
+            shape,
             offset,
         }
     }
@@ -393,11 +456,11 @@ pub trait TensorLike<'a> {
     {
         assert!(2 <= self.shape().len() && self.shape().len() <= 3); // For now we can only do Batch matrix
         assert!(right.shape().len() == 2); // rhs must be a matrix
-        println!(
-            "self.shape()={:?}, right.shape()={:?}",
-            self.shape(),
-            right.shape()
-        );
+                                           // println!(
+                                           // "self.shape()={:?}, right.shape()={:?}",
+                                           // self.shape(),
+                                           // right.shape()
+                                           // );
         assert!(self.shape()[self.shape().len() - 1] == right.shape()[right.shape().len() - 2]);
         let new_shape = if self.shape().len() == 2 {
             vec![1, self.shape()[0], right.shape()[1]]
@@ -483,15 +546,49 @@ pub trait TensorLike<'a> {
     // shape: new_shape,
     // }
     // }
+
+    fn iter_elements<U>(&self) -> IndexIterator {
+        IndexIterator {
+            index: vec![0; self.shape().len()],
+            dimensions: self.shape().clone(),
+            carry: Default::default(),
+        }
+    }
 }
 
-impl<'a, U, T> PartialEq<U> for TensorView<'a, T>
+impl<'a, T, U> PartialEq<U> for TensorView<'a, T>
 where
     T: Numeric,
-    U: for<'b> TensorLike<'b, Elem = T>,
+    U: TensorLike<'a, Elem = T>,
 {
     fn eq(&self, other: &U) -> bool {
-        false
+        // println!(
+        // "self.shape={:?}, other.shape={:?}",
+        // self.shape.clone(),
+        // other.shape().clone()
+        // );
+        if other.shape() != &self.shape {
+            return false;
+        }
+        let index_iter = IndexIterator {
+            index: vec![0; self.shape.len()],
+            dimensions: self.shape.clone(),
+            carry: Default::default(),
+        };
+
+        for idx in index_iter {
+            // println!(
+            // "self[{:?}]={:?}, other[{:?}]={:?}",
+            // idx.clone(),
+            // self.get(&idx),
+            // idx.clone(),
+            // other.get(&idx)
+            // );
+            if self.get(&idx) != other.get(&idx) {
+                return false;
+            }
+        }
+        true
     }
 }
 
@@ -566,10 +663,20 @@ where
 
 // TODO: figure out how to make this hold references with two lifetimes, and get the iterator to return a reference
 #[derive(Default)]
-struct IndexIterator {
+pub struct IndexIterator {
     index: Vec<usize>,
     dimensions: Vec<usize>,
     carry: usize,
+}
+
+impl IndexIterator {
+    pub fn new(dimensions: Vec<usize>) -> IndexIterator {
+        IndexIterator {
+            index: vec![0; dimensions.len()],
+            dimensions,
+            carry: Default::default(),
+        }
+    }
 }
 
 impl Iterator for IndexIterator {
@@ -596,28 +703,6 @@ fn reset_trailing_indices(index: &mut [usize], position: usize) {
     for idx in index.iter_mut().skip(position + 1) {
         *idx = 0;
     }
-}
-
-#[test]
-fn test_index_iterator() {
-    let index_iter = IndexIterator {
-        index: vec![0, 0, 0],
-        dimensions: vec![2, 2, 2],
-        carry: Default::default(),
-    };
-    assert_eq!(
-        index_iter.collect::<Vec<_>>(),
-        vec![
-            [0, 0, 0].to_vec(),
-            [0, 0, 1].to_vec(),
-            [0, 1, 0].to_vec(),
-            [0, 1, 1].to_vec(),
-            [1, 0, 0].to_vec(),
-            [1, 0, 1].to_vec(),
-            [1, 1, 0].to_vec(),
-            [1, 1, 1].to_vec(),
-        ]
-    );
 }
 
 impl<T, U> Mul<&U> for &Tensor<T>
