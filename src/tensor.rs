@@ -117,6 +117,7 @@ where
         }
         let mut global_idx = 0;
         let mut multiplier = 1;
+        // TODO: consider turning this into a fold operation.
         for (i, (&dim, &idx_dim)) in self.shape.iter().rev().zip(index.iter().rev()).enumerate() {
             // Fix the indexing.  We need to have all the reverses index may be shorter than shape.
             let i = self.shape.len() - i - 1;
@@ -545,6 +546,14 @@ pub trait TensorLike<'a> {
     // shape: new_shape,
     // }
     // }
+
+    fn iter_elements<U>(&self) -> IndexIterator {
+        IndexIterator {
+            index: vec![0; self.shape().len()],
+            dimensions: self.shape().clone(),
+            carry: Default::default(),
+        }
+    }
 }
 
 impl<'a, T, U> PartialEq<U> for TensorView<'a, T>
@@ -654,10 +663,20 @@ where
 
 // TODO: figure out how to make this hold references with two lifetimes, and get the iterator to return a reference
 #[derive(Default)]
-struct IndexIterator {
+pub struct IndexIterator {
     index: Vec<usize>,
     dimensions: Vec<usize>,
     carry: usize,
+}
+
+impl IndexIterator {
+    pub fn new(dimensions: Vec<usize>) -> IndexIterator {
+        IndexIterator {
+            index: vec![0; dimensions.len()],
+            dimensions,
+            carry: Default::default(),
+        }
+    }
 }
 
 impl Iterator for IndexIterator {
@@ -684,28 +703,6 @@ fn reset_trailing_indices(index: &mut [usize], position: usize) {
     for idx in index.iter_mut().skip(position + 1) {
         *idx = 0;
     }
-}
-
-#[test]
-fn test_index_iterator() {
-    let index_iter = IndexIterator {
-        index: vec![0, 0, 0],
-        dimensions: vec![2, 2, 2],
-        carry: Default::default(),
-    };
-    assert_eq!(
-        index_iter.collect::<Vec<_>>(),
-        vec![
-            [0, 0, 0].to_vec(),
-            [0, 0, 1].to_vec(),
-            [0, 1, 0].to_vec(),
-            [0, 1, 1].to_vec(),
-            [1, 0, 0].to_vec(),
-            [1, 0, 1].to_vec(),
-            [1, 1, 0].to_vec(),
-            [1, 1, 1].to_vec(),
-        ]
-    );
 }
 
 impl<T, U> Mul<&U> for &Tensor<T>

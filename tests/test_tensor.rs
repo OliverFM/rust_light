@@ -23,6 +23,18 @@ fn test_slicing() {
     println!("Slice[&vec![0,0,0]]= {:?}", slice1[&vec![0, 0]]);
     assert_eq!(slice1[&vec![0, 0]], 1);
     assert_ne!(slice1, slice2);
+
+    let tensor = Tensor::new((0..32).collect(), vec![2, 4, 4]);
+    let slice = tensor.slice(vec![
+        SliceRange::new(1, 2),
+        SliceRange::new(2, 3),
+        SliceRange::new(1, 4),
+    ]);
+    assert_eq!(slice.shape(), &vec![1, 1, 3]);
+    assert_eq!(
+        slice,
+        Tensor::from([[[25, 26, 27].to_vec()].to_vec()].to_vec())
+    );
 }
 
 // #[ignore]
@@ -146,5 +158,23 @@ fn test_right_scalar_multiplication() {
     assert_eq!(
         vec.right_scalar_multiplication(&42),
         Tensor::new(vec![42, 42, 42, 42], vec![4])
+    );
+}
+
+#[test]
+fn test_index_iterator() {
+    let index_iter = IndexIterator::new(vec![2, 2, 2]);
+    assert_eq!(
+        index_iter.collect::<Vec<_>>(),
+        vec![
+            [0, 0, 0].to_vec(),
+            [0, 0, 1].to_vec(),
+            [0, 1, 0].to_vec(),
+            [0, 1, 1].to_vec(),
+            [1, 0, 0].to_vec(),
+            [1, 0, 1].to_vec(),
+            [1, 1, 0].to_vec(),
+            [1, 1, 1].to_vec(),
+        ]
     );
 }
