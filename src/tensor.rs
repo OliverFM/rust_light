@@ -57,6 +57,17 @@ where
     }
 }
 
+impl<T, U, const N: usize> From<[U; N]> for Tensor<T>
+where
+    T: Numeric,
+    Tensor<T>: From<U>,
+    U: Clone,
+{
+    fn from(value: [U; N]) -> Tensor<T> {
+        From::from(value.to_vec())
+    }
+}
+
 impl<T, U> From<Vec<U>> for Tensor<T>
 where
     T: Numeric,

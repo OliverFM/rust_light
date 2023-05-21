@@ -14,8 +14,6 @@ fn test_slicing() {
         tensor2.slice(vec![SliceRange::new(0, 2), SliceRange::new(0, 2),])
     );
 
-    // assert_eq!(tensor1.slice(vec![.., 1..]), tensor2.slice(vec![.., ..]));
-    // let slice0 = tensor1.slice(vec![SliceRange::new(0, 2), SliceRange::new(1, 2)]);
     let slice1 = tensor1.slice(vec![SliceRange::new(0, 2), SliceRange::new(1, 3)]);
     let slice2 = tensor1.slice(vec![SliceRange::new(0, 2), SliceRange::new(0, 3)]);
 
@@ -38,6 +36,12 @@ fn test_slicing() {
 }
 
 // #[ignore]
+#[test]
+fn test_from_array() {
+    let tensor1 = Tensor::from([[0, 1, 2], [3, 4, 5]]);
+    let tensor2 = Tensor::new((0..6).collect(), vec![2, 3]);
+    assert_eq!(tensor1, tensor2);
+}
 #[test]
 fn test_from_vec() {
     let tensor1 = Tensor::from(vec![vec![0, 1, 2], vec![3, 4, 5]]);
