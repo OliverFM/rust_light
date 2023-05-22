@@ -41,7 +41,7 @@ pub struct Tensor<T>
 where
     T: Numeric,
 {
-    pub array: Vec<T>, // later on, I will need unsafe code to replace this with a statically sized type
+    array: Vec<T>, // later on, I will need unsafe code to replace this with a statically sized type
     shape: Vec<usize>, // TODO: convert to let this be a slice
 }
 
@@ -90,8 +90,7 @@ impl<T> Tensor<T>
 where
     T: Numeric,
 {
-    // TODO: make private
-    pub fn get_global_index(
+    fn get_global_index(
         &self,
         index: &Vec<usize>,
         offset: Option<&Vec<SliceRange>>,
@@ -207,15 +206,6 @@ where
         TensorView::new(self, shape, self.shape.clone())
     }
 
-    // TODO: deprecate
-    // pub fn to_view(&self) -> TensorView<'_, T> {
-    // TensorView {
-    // tensor: self,
-    // shape: self.shape.clone(),
-    // offset: self.shape.clone(),
-    // }
-    // }
-
     pub fn freeze(&self) -> FrozenTensorView<'_, T> {
         FrozenTensorView {
             tensor: self,
@@ -252,12 +242,7 @@ where
         }
     }
 
-    // TODO: make private
-    pub fn get_with_offset(
-        &self,
-        index: &Vec<usize>,
-        offset: &Vec<SliceRange>,
-    ) -> Result<&T, String> {
+    fn get_with_offset(&self, index: &Vec<usize>, offset: &Vec<SliceRange>) -> Result<&T, String> {
         match self.get_global_index(index, Some(offset)) {
             Ok(global_idx) => Ok(&self.array[global_idx]),
             Err(e) => Err(e),
@@ -309,20 +294,6 @@ where
         self.shape
     }
 }
-
-// TODO: figure out how to get scalar multiplication with correct typing
-// impl<T> Add<T> for &Tensor<T>
-// where
-// T: Numeric,
-// {
-// type Output = Tensor<T>;
-// fn add(self, right: T) -> Tensor<T> {
-// Tensor::new(
-// self.array.iter().map(|x| *x + right).collect(),
-// self.shape.clone(),
-// )
-// }
-// }
 
 impl<T, U> Add<&U> for &Tensor<T>
 where

@@ -1,8 +1,3 @@
-use std::cmp::PartialEq;
-
-use std::ops::{Add, Index, Mul};
-
-// use std::ops::{RangeBounds, RangeFrom, RangeFull};
 // TODO: figure out how to make this hold references with two lifetimes, and get the iterator to return a reference
 #[derive(Default)]
 pub struct IndexIterator {
