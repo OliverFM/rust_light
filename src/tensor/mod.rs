@@ -1,7 +1,9 @@
+mod numeric;
 mod tensor_like;
 mod tensor_view;
 mod utils;
 
+pub use numeric::*;
 pub use tensor_like::*;
 pub use tensor_view::*;
 pub use utils::*;
@@ -9,7 +11,7 @@ pub use utils::*;
 // use crate::tensor::utils::{IndexIterator, Numeric};
 // use crate::tensor::*;
 use itertools::{EitherOrBoth::*, Itertools};
-use num::{One, Zero};
+// use num::{Zero};
 use std::cmp::{max, PartialEq};
 use std::convert::From;
 use std::ops::{Add, Index, Mul};
@@ -202,7 +204,7 @@ where
     }
 
     pub fn view(&self, shape: Vec<SliceRange>) -> TensorView<'_, T> {
-        TensorView::new(&self, shape, self.shape.clone())
+        TensorView::new(self, shape, self.shape.clone())
     }
 
     // TODO: deprecate

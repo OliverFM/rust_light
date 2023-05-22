@@ -1,7 +1,5 @@
-use itertools::{EitherOrBoth::*, Itertools};
-use num::{One, Zero};
-use std::cmp::{max, PartialEq};
-use std::convert::From;
+use std::cmp::PartialEq;
+
 use std::ops::{Add, Index, Mul};
 
 // use std::ops::{RangeBounds, RangeFrom, RangeFull};
@@ -48,15 +46,3 @@ fn reset_trailing_indices(index: &mut [usize], position: usize) {
         *idx = 0;
     }
 }
-
-pub trait Numeric: Zero + One + Copy + Clone + Mul + Add + PartialEq + std::fmt::Debug {}
-// https://stackoverflow.com/questions/42381185/specifying-generic-parameter-to-belong-to-a-small-set-of-types
-macro_rules! numeric_impl {
-    ($($t: ty),+) => {
-        $(
-            impl Numeric for $t {}
-        )+
-    }
-}
-
-numeric_impl!(usize, u8, u32, u64, u128, i8, i32, i64, i128, f32, f64);

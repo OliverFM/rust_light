@@ -1,7 +1,7 @@
-use super::tensor_view::*;
-use super::utils::*;
-use super::*;
-use crate::tensor::TensorView;
+use super::numeric::*;
+use super::utils::IndexIterator;
+// use super::utils::*;
+use crate::tensor::{FrozenTensorView, SliceRange, Tensor, TensorView};
 
 pub trait TensorLike<'a> {
     type Elem: Numeric;

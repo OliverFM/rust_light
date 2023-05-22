@@ -1,16 +1,7 @@
-use crate::tensor::utils::{IndexIterator, Numeric};
-use crate::tensor::FrozenTensorView;
-use crate::tensor::SliceRange;
-use crate::tensor::Tensor;
-use crate::tensor::TensorLike;
-// use crate::tensor::TensorView;
-use super::tensor_like::*;
-use super::utils::*;
-use itertools::{EitherOrBoth::*, Itertools};
-use num::{One, Zero};
-use std::cmp::{max, PartialEq};
-use std::convert::From;
-use std::ops::{Add, Index, Mul};
+use super::numeric::*;
+use crate::tensor::{FrozenTensorView, SliceRange, Tensor, TensorLike};
+use std::cmp::PartialEq;
+use std::ops::Index;
 
 #[derive(Debug, Clone)]
 pub struct TensorView<'a, T>
