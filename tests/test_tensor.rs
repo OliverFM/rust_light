@@ -39,6 +39,13 @@ fn test_slicing() {
 
 // #[ignore]
 #[test]
+fn test_from_array() {
+    let tensor1 = Tensor::from([[0, 1, 2], [3, 4, 5]]);
+    let tensor2 = Tensor::new((0..6).collect(), vec![2, 3]);
+    assert_eq!(tensor1, tensor2);
+}
+
+#[test]
 fn test_from_vec() {
     let tensor1 = Tensor::from(vec![vec![0, 1, 2], vec![3, 4, 5]]);
     let tensor2 = Tensor::new((0..6).collect(), vec![2, 3]);
