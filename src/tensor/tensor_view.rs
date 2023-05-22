@@ -3,13 +3,25 @@ use crate::tensor::FrozenTensorView;
 use crate::tensor::SliceRange;
 use crate::tensor::Tensor;
 use crate::tensor::TensorLike;
-use crate::tensor::TensorView;
+// use crate::tensor::TensorView;
+use super::tensor_like::*;
+use super::utils::*;
 use itertools::{EitherOrBoth::*, Itertools};
 use num::{One, Zero};
 use std::cmp::{max, PartialEq};
 use std::convert::From;
 use std::ops::{Add, Index, Mul};
 
+#[derive(Debug, Clone)]
+pub struct TensorView<'a, T>
+where
+    T: Numeric,
+{
+    // TODO: convert this to look at slices of tensors. e.g. tensor[..1]
+    tensor: &'a Tensor<T>,
+    shape: Vec<usize>,
+    offset: Vec<SliceRange>,
+}
 impl<'a, T> Index<&Vec<usize>> for TensorView<'a, T>
 where
     T: Numeric,
@@ -26,6 +38,13 @@ impl<'a, T> TensorView<'a, T>
 where
     T: Numeric,
 {
+    pub fn new(tensor: &Tensor<T>, offset: Vec<SliceRange>, shape: Vec<usize>) -> TensorView<T> {
+        TensorView {
+            tensor,
+            offset,
+            shape, // TODO: fix this
+        }
+    }
     pub fn to_tensor(&self) -> Tensor<T> {
         (*self.tensor).clone()
     }
@@ -71,28 +90,11 @@ where
     U: TensorLike<'a, Elem = T>,
 {
     fn eq(&self, other: &U) -> bool {
-        // println!(
-        // "self.shape={:?}, other.shape={:?}",
-        // self.shape.clone(),
-        // other.shape().clone()
-        // );
         if other.shape() != &self.shape {
             return false;
         }
-        let index_iter = IndexIterator {
-            index: vec![0; self.shape.len()],
-            dimensions: self.shape.clone(),
-            carry: Default::default(),
-        };
 
-        for idx in index_iter {
-            // println!(
-            // "self[{:?}]={:?}, other[{:?}]={:?}",
-            // idx.clone(),
-            // self.get(&idx),
-            // idx.clone(),
-            // other.get(&idx)
-            // );
+        for idx in self.iter_elements() {
             if self.get(&idx) != other.get(&idx) {
                 return false;
             }
