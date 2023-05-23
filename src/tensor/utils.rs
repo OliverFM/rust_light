@@ -55,16 +55,19 @@ fn reset_trailing_indices(index: &mut [usize], position: usize) {
 #[test]
 fn test_increment_index() {
     let mut index = vec![0, 0, 0];
-    let dimensions = vec![2, 2, 2];
+    let dimensions = vec![2, 3, 2];
     let indices = vec![
-        // [0, 0, 0].to_vec(),
         [0, 0, 1].to_vec(),
         [0, 1, 0].to_vec(),
         [0, 1, 1].to_vec(),
+        [0, 2, 0].to_vec(),
+        [0, 2, 1].to_vec(),
         [1, 0, 0].to_vec(),
         [1, 0, 1].to_vec(),
         [1, 1, 0].to_vec(),
         [1, 1, 1].to_vec(),
+        [1, 2, 0].to_vec(),
+        [1, 2, 1].to_vec(),
     ];
     for expected_idx in indices.into_iter() {
         let valid = increment_index(&mut index, &dimensions);

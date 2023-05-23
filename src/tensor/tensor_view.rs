@@ -38,13 +38,6 @@ where
             assert!(slice_range.end <= tensor_dim);
             shape.push(slice_range.end - slice_range.start);
         }
-        // for (range, (idx, &dim)) in offset.iter().rev().zip(shape.iter().rev().enumerate()) {
-        // println!(
-        // "tensor.shape={:?}, range={range:?}, dim={dim}, idx={idx}",
-        // tensor.shape
-        // );
-        // assert!(range.end <= dim);
-        // }
         TensorView {
             tensor,
             offset,
