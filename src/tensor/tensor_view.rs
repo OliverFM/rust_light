@@ -29,7 +29,22 @@ impl<'a, T> TensorView<'a, T>
 where
     T: Numeric,
 {
-    pub fn new(tensor: &Tensor<T>, offset: Vec<SliceRange>, shape: Vec<usize>) -> TensorView<T> {
+    pub fn new(tensor: &Tensor<T>, offset: Vec<SliceRange>) -> TensorView<T> {
+        assert_eq!(offset.len(), tensor.shape.len());
+        let mut shape = Vec::with_capacity(offset.len());
+        for (slice_range, &tensor_dim) in offset.iter().zip(tensor.shape.iter()) {
+            // NOTE: assuming that all intervals are half open, for now.
+            // TODO: add a better parser once I have generalised this
+            assert!(slice_range.end <= tensor_dim);
+            shape.push(slice_range.end - slice_range.start);
+        }
+        // for (range, (idx, &dim)) in offset.iter().rev().zip(shape.iter().rev().enumerate()) {
+        // println!(
+        // "tensor.shape={:?}, range={range:?}, dim={dim}, idx={idx}",
+        // tensor.shape
+        // );
+        // assert!(range.end <= dim);
+        // }
         TensorView {
             tensor,
             offset,
@@ -85,7 +100,7 @@ where
             return false;
         }
 
-        for idx in self.iter_elements() {
+        for idx in self.iter_indices() {
             if self.get(&idx) != other.get(&idx) {
                 return false;
             }
