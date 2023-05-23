@@ -8,25 +8,23 @@ pub use tensor_like::*;
 pub use tensor_view::*;
 pub use utils::*;
 
-// use crate::tensor::utils::{IndexIterator, Numeric};
-// use crate::tensor::*;
 use itertools::{EitherOrBoth::*, Itertools};
-// use num::{Zero};
 use std::cmp::{max, PartialEq};
 use std::convert::From;
 use std::ops::{Add, Index, Mul};
 
-// use std::ops::{RangeBounds, RangeFrom, RangeFull};
-
 #[derive(Debug, PartialEq, Clone)]
 pub struct SliceRange {
+    /// inclusive
     start: usize,
-    end: usize,  // TODO: figure out how to make this optional
+    /// exclusive
+    end: usize, // TODO: figure out how to make this optional
     skip: usize, // TODO: add this
 }
 
 impl SliceRange {
     pub fn new(start: usize, end: usize) -> SliceRange {
+        assert!(start <= end);
         SliceRange {
             start,
             end,
@@ -214,7 +212,7 @@ where
     }
 
     pub fn view(&self, shape: Vec<SliceRange>) -> TensorView<'_, T> {
-        TensorView::new(self, shape, self.shape.clone())
+        TensorView::new(self, shape)
     }
 
     pub fn freeze(&self) -> FrozenTensorView<'_, T> {
@@ -281,8 +279,8 @@ where
         &self.shape
     }
 
-    // fn get(&self, index: &Vec<usize>) -> Result<&T, String> {
-    // self.freeze().get(index)
+    // fn iter_elements(&self) -> std::slice::Iter<Item = T> {
+    // self.array.iter()
     // }
 
     fn tensor(&self) -> &Tensor<T> {

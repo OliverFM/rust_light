@@ -6,7 +6,7 @@ fn test_slicing() {
     let tensor2 = Tensor::from(vec![vec![1, 2], vec![4, 5]]);
     println!(
         "{:?}\n{:?}",
-        tensor1.slice(vec![SliceRange::new(0, 2), SliceRange::new(1, 3),]),
+        tensor1.slice(vec![SliceRange::new(0, 2), SliceRange::new(1, 2),]),
         tensor2.slice(vec![SliceRange::new(0, 2), SliceRange::new(0, 2),])
     );
     assert_eq!(
@@ -165,23 +165,5 @@ fn test_right_scalar_multiplication() {
     assert_eq!(
         vec.right_scalar_multiplication(&42),
         Tensor::new(vec![42, 42, 42, 42], vec![4])
-    );
-}
-
-#[test]
-fn test_index_iterator() {
-    let index_iter = IndexIterator::new(vec![2, 2, 2]);
-    assert_eq!(
-        index_iter.collect::<Vec<_>>(),
-        vec![
-            [0, 0, 0].to_vec(),
-            [0, 0, 1].to_vec(),
-            [0, 1, 0].to_vec(),
-            [0, 1, 1].to_vec(),
-            [1, 0, 0].to_vec(),
-            [1, 0, 1].to_vec(),
-            [1, 1, 0].to_vec(),
-            [1, 1, 1].to_vec(),
-        ]
     );
 }

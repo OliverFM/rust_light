@@ -1,5 +1,5 @@
 use super::numeric::*;
-use super::utils::IndexIterator;
+use super::utils::{IndexIterator};
 // use super::utils::*;
 use crate::tensor::{SliceRange, Tensor, TensorView};
 
@@ -11,18 +11,19 @@ pub trait TensorLike<'a> {
 
     fn shape(&self) -> &Vec<usize>;
 
+    // fn sum(&self) -> T;
+    // fn sum(&self) -> Self::Elem {
+    // self.iter_elements().reduce(|elem, acc| elem + acc)
+    // }
+
     fn tensor(&self) -> &Tensor<Self::Elem>;
 
     fn to_tensor(&self) -> Tensor<Self::Elem>;
 
+    // fn iter_elements<I: Iterator<Item = Self::Elem>>(&self) -> I;
+
     fn slice(&self, offset: Vec<SliceRange>) -> TensorView<Self::Elem> {
-        let mut shape = Vec::with_capacity(offset.len() + 1);
-        for slice_range in offset.iter() {
-            // NOTE: assuming that all intervals are half open, for now.
-            // TODO: add a better parser once I have generalised this
-            shape.push(slice_range.end - slice_range.start);
-        }
-        TensorView::new(self.tensor(), offset, shape)
+        TensorView::new(self.tensor(), offset)
     }
 
     fn left_scalar_multiplication(&self, &scalar: &Self::Elem) -> Tensor<Self::Elem> {
@@ -144,7 +145,7 @@ pub trait TensorLike<'a> {
         true
     }
 
-    fn iter_elements(&self) -> IndexIterator {
+    fn iter_indices(&self) -> IndexIterator {
         IndexIterator::new(self.shape().clone())
     }
 }
