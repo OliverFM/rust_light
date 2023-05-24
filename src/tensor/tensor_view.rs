@@ -1,5 +1,5 @@
 use super::numeric::*;
-use crate::tensor::{FrozenTensorView, SliceRange, Tensor, TensorLike};
+use crate::tensor::{ElementIterator, FrozenTensorView, SliceRange, Tensor, TensorLike};
 use std::cmp::PartialEq;
 use std::ops::Index;
 
@@ -56,10 +56,11 @@ where
     }
 }
 
-impl<'a, T> TensorLike<'a> for TensorView<'a, T>
+impl<T> TensorLike<'_> for TensorView<'_, T>
 where
     T: Numeric,
 {
+    // type Iter = std::slice::Iter<'a, T>;
     type Elem = T;
     fn shape(&self) -> &Vec<usize> {
         &self.shape
@@ -70,8 +71,17 @@ where
     }
 
     fn to_tensor(&self) -> Tensor<T> {
-        // self.tensor.clone()
         todo!();
+        // let mut tensor = Tensor::new_empty(self.shape);
+    }
+
+    // fn iter_elements(&self) -> Self::Iter {
+    // todo!();
+    // }
+    fn sum(&self) -> Self::Elem {
+        let iter = ElementIterator::new(self);
+        let v = iter.fold(Self::Elem::zero(), |acc, x| acc + *x);
+        v
     }
 
     fn get(&self, index: &Vec<usize>) -> Result<&T, String> {
@@ -100,4 +110,19 @@ where
         }
         true
     }
+}
+
+#[test]
+fn test_sum_tensor_view() {
+    let tensor = Tensor::from([
+        [[0, 1, 2, 3], [2, 3, 4, 5], [3, 4, 5, 6]],
+        [[0, 1, 2, 3], [2, 3, 4, 5], [3, 4, 5, 6]],
+    ]);
+    let view = tensor.slice(vec![
+        SliceRange::new(0, 2),
+        SliceRange::new(1, 2),
+        SliceRange::new(2, 4),
+    ]);
+
+    assert_eq!(view.sum(), 2 * (4 + 5));
 }
