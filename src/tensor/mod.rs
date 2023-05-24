@@ -279,14 +279,17 @@ where
         &self.shape
     }
 
-    // fn iter_elements(&self) -> std::slice::Iter<Item = T> {
-    // self.array.iter()
-    // }
+    fn sum(&self) -> Self::Elem {
+        self.array
+            .iter()
+            .fold(Self::Elem::zero(), |acc, x| acc + *x)
+    }
 
-    fn tensor(&self) -> &Tensor<T> {
+    fn tensor(&self) -> &Self {
         self
     }
-    fn to_tensor(&self) -> Tensor<T> {
+
+    fn to_tensor(&self) -> Self {
         self.clone()
     }
 }

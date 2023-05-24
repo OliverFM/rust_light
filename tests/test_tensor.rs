@@ -37,7 +37,6 @@ fn test_slicing() {
     );
 }
 
-// #[ignore]
 #[test]
 fn test_from_array() {
     let tensor1 = Tensor::from([[0, 1, 2], [3, 4, 5]]);
