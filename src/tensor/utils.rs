@@ -1,5 +1,5 @@
 use crate::tensor::numeric::Numeric;
-use crate::tensor::{SliceRange, Tensor, TensorLike};
+use crate::tensor::TensorLike;
 
 pub struct ElementIterator<'b, T, U>
 where
@@ -47,14 +47,18 @@ where
 
 #[test]
 fn test_element_iterator() {
+    use crate::tensor::{SliceRange, Tensor};
     let v = [1, 2, 3];
     let tensor = Tensor::from(v);
     let view = tensor.view(vec![SliceRange::new(0, 3)]);
-    let element_iterator = ElementIterator::new(&tensor);
+    let tensor_element_iterator = ElementIterator::new(&tensor);
     let element_iterator = ElementIterator::new(&view);
-    for (elem, expected) in element_iterator.zip(v.iter()) {
-        println!("elem={elem:?}, expected={expected:?}");
-        assert_eq!(elem, expected);
+    for ((view_elem, tensor_elem), expected) in
+        element_iterator.zip(tensor_element_iterator).zip(v.iter())
+    {
+        // println!("elem={elem:?}, expected={expected:?}");
+        assert_eq!(view_elem, expected);
+        assert_eq!(tensor_elem, expected);
     }
 }
 

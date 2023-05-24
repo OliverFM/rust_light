@@ -60,7 +60,6 @@ impl<T> TensorLike<'_> for TensorView<'_, T>
 where
     T: Numeric,
 {
-    // type Iter = std::slice::Iter<'a, T>;
     type Elem = T;
     fn shape(&self) -> &Vec<usize> {
         &self.shape
@@ -75,13 +74,10 @@ where
         // let mut tensor = Tensor::new_empty(self.shape);
     }
 
-    // fn iter_elements(&self) -> Self::Iter {
-    // todo!();
-    // }
     fn sum(&self) -> Self::Elem {
         let iter = ElementIterator::new(self);
-        let v = iter.fold(Self::Elem::zero(), |acc, x| acc + *x);
-        v
+
+        iter.fold(Self::Elem::zero(), |acc, x| acc + *x)
     }
 
     fn get(&self, index: &Vec<usize>) -> Result<&T, String> {

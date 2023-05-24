@@ -279,10 +279,6 @@ where
         &self.shape
     }
 
-    // fn iter_elements(&self) -> Self::Iter {
-    // todo!();
-    // }
-
     fn sum(&self) -> Self::Elem {
         self.array
             .iter()

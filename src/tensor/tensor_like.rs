@@ -1,18 +1,15 @@
 use super::numeric::*;
-use super::utils::{ElementIterator, IndexIterator};
-// use super::utils::*;
+use super::utils::IndexIterator;
 use crate::tensor::{SliceRange, Tensor, TensorView};
 
 pub trait TensorLike<'a> {
     type Elem: Numeric;
-    // type Iter;
     fn get(&self, index: &Vec<usize>) -> Result<&Self::Elem, String> {
         (*self.tensor()).get(index)
     }
 
     fn shape(&self) -> &Vec<usize>;
 
-    // fn sum(&self) -> T;
     fn sum(&self) -> Self::Elem;
 
     /// Return a reference to the underlying tensor
@@ -21,8 +18,6 @@ pub trait TensorLike<'a> {
     /// Convert this self into a new Tensor -- is self is already a Tensor this is a clone.
     /// for a `TensorView`, for example, the new Tensor is the same shape as the view.
     fn to_tensor(&self) -> Tensor<Self::Elem>;
-
-    // fn iter_elements(&self) -> Self::Iter;
 
     fn slice(&self, offset: Vec<SliceRange>) -> TensorView<Self::Elem> {
         TensorView::new(self.tensor(), offset)
