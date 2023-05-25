@@ -52,6 +52,7 @@ pub trait TensorLike<'a> {
         Tensor {
             array: vec![result],
             shape: vec![1],
+            ..Default::default()
         }
     }
 
@@ -112,6 +113,7 @@ pub trait TensorLike<'a> {
             return Tensor {
                 array: result.array,
                 shape: result.shape[1..].to_vec(),
+                ..Default::default()
             };
         }
         result
