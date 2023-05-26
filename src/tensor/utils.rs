@@ -92,7 +92,8 @@ impl Iterator for IndexIterator {
     }
 }
 
-pub fn increment_index(index: &mut [usize], shape: &[usize]) -> bool {
+use std::ops::Deref;
+pub fn increment_index<V: Deref<Target = Vec<usize>>>(index: &mut [usize], shape: V) -> bool {
     let mut carry = 1;
     for i in (0..index.len()).rev() {
         let v = index[i];

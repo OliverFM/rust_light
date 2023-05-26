@@ -61,7 +61,8 @@ where
     T: Numeric,
 {
     type Elem = T;
-    fn shape(&self) -> &Vec<usize> {
+    type ShapeReturn = &'a Vec<usize>;
+    fn shape(&self) -> Self::ShapeReturn {
         &self.shape
     }
 

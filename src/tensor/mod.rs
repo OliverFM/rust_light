@@ -10,10 +10,10 @@ pub use tensor_view::*;
 pub use utils::*;
 
 use itertools::{EitherOrBoth::*, Itertools};
-use std::cell::RefCell;
+use std::cell::{Ref, RefCell};
 use std::cmp::{max, PartialEq};
 use std::convert::From;
-use std::ops::{Add, Index, Mul};
+use std::ops::{Add, Deref, Index, Mul};
 use std::rc::Rc;
 
 #[derive(Debug, PartialEq, Clone)]
@@ -44,9 +44,10 @@ where
     T: Numeric,
 {
     type Elem = T;
+    type ShapeReturn = Ref<'a, Vec<usize>>;
 
-    fn shape(&self) -> &Vec<usize> {
-        todo!()
+    fn shape(&self) -> Self::ShapeReturn {
+        Ref::map((*(self.0)).borrow(), |x| x.shape())
     }
 
     fn sum(&self) -> Self::Elem {
@@ -60,6 +61,15 @@ where
     fn to_tensor(&self) -> Tensor<Self::Elem> {
         (*(self.0)).borrow().clone()
     }
+}
+#[test]
+fn test_user_tensor_multiplication() {
+    let v = vec![0, 1, 2, 3];
+    let matrix = UserTensor(Rc::new(RefCell::new(Tensor::new(v, vec![2, 2])))); // [[0,1],[2,3]]
+    let shape = vec![2, 1];
+    let e1 = Tensor::new(vec![0, 1], vec![2, 1]);
+
+    assert_eq!(matrix.bmm(&e1), Tensor::new(vec![1, 3], shape.clone()));
 }
 
 /// The core `struct` in this library.
@@ -348,7 +358,8 @@ where
     T: Numeric,
 {
     type Elem = T;
-    fn shape(&self) -> &Vec<usize> {
+    type ShapeReturn = &'a Vec<usize>;
+    fn shape(&self) -> Self::ShapeReturn {
         &self.shape
     }
 

@@ -1,14 +1,16 @@
 use super::numeric::*;
 use super::utils::IndexIterator;
 use crate::tensor::{SliceRange, Tensor, TensorView};
+use std::ops::{Add, Deref, Index, Mul};
 
 pub trait TensorLike<'a> {
     type Elem: Numeric;
+    type ShapeReturn: Deref<Target = Vec<usize>>;
     fn get(&self, index: &Vec<usize>) -> Result<&Self::Elem, String> {
         (*self.tensor()).get(index)
     }
 
-    fn shape(&self) -> &Vec<usize>;
+    fn shape(&self) -> Self::ShapeReturn;
 
     fn sum(&self) -> Self::Elem;
 
@@ -123,10 +125,10 @@ pub trait TensorLike<'a> {
     where
         U: for<'b> TensorLike<'b, Elem = Self::Elem>,
     {
-        self.shape() == other.shape()
+        *self.shape() == *other.shape()
     }
 
-    fn broadcastable(&self, new_shape: &[usize]) -> bool {
+    fn broadcastable<V: Deref<Target = Vec<usize>>>(&self, new_shape: V) -> bool {
         // TODO: test this!
         for (&d1, &d2) in self
             .shape()
