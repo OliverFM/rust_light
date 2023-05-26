@@ -15,7 +15,7 @@ where
 {
     pub fn forward<U>(&self, batch: &U) -> Tensor<T>
     where
-        U: for<'b> TensorLike<'b, Elem = T>,
+        U: TensorLike<Elem = T>,
     {
         let y = &self.weights * batch;
         println!("y.shape()={:?}", y.shape());

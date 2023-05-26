@@ -3,14 +3,17 @@ use super::utils::IndexIterator;
 use crate::tensor::{SliceRange, Tensor, TensorView};
 use std::ops::{Add, Deref, Index, Mul};
 
-pub trait TensorLike<'a> {
+pub trait TensorLike {
     type Elem: Numeric;
-    type ShapeReturn: Deref<Target = Vec<usize>>;
+    type ShapeReturn<'a>: Deref<Target = Vec<usize>>
+    where
+        Self: 'a;
+
     fn get(&self, index: &Vec<usize>) -> Result<&Self::Elem, String> {
         (*self.tensor()).get(index)
     }
 
-    fn shape(&self) -> Self::ShapeReturn;
+    fn shape(&self) -> Self::ShapeReturn<'_>;
 
     fn sum(&self) -> Self::Elem;
 
@@ -43,7 +46,7 @@ pub trait TensorLike<'a> {
 
     fn dot<U>(&self, other: &U) -> Tensor<Self::Elem>
     where
-        U: for<'b> TensorLike<'b, Elem = Self::Elem>,
+        U: TensorLike<Elem = Self::Elem>,
     {
         //! generalised dot product: returns to acculumulated sum of the elementwise product.
         assert!(self.same_shape(other));
@@ -76,7 +79,7 @@ pub trait TensorLike<'a> {
     /// ```
     fn bmm<U>(&self, right: &U) -> Tensor<Self::Elem>
     where
-        U: for<'b> TensorLike<'b, Elem = Self::Elem>,
+        U: TensorLike<Elem = Self::Elem>,
     {
         assert!(2 <= self.shape().len() && self.shape().len() <= 3); // For now we can only do Batch matrix
         assert!(right.shape().len() == 2); // rhs must be a matrix
@@ -123,7 +126,7 @@ pub trait TensorLike<'a> {
 
     fn same_shape<U>(&self, other: &U) -> bool
     where
-        U: for<'b> TensorLike<'b, Elem = Self::Elem>,
+        U: TensorLike<Elem = Self::Elem>,
     {
         *self.shape() == *other.shape()
     }

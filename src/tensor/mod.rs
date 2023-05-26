@@ -39,14 +39,14 @@ impl SliceRange {
 #[derive(Debug, PartialEq, Clone)]
 pub struct UserTensor<T: Numeric>(Rc<RefCell<Tensor<T>>>);
 
-impl<'a, T> TensorLike<'a> for UserTensor<T>
+impl<T> TensorLike for UserTensor<T>
 where
     T: Numeric,
 {
     type Elem = T;
-    type ShapeReturn = Ref<'a, Vec<usize>>;
+    type ShapeReturn<'a> = Ref<'a, Vec<usize>> where Self: 'a;
 
-    fn shape(&self) -> Self::ShapeReturn {
+    fn shape(&self) -> Self::ShapeReturn<'_> {
         Ref::map((*(self.0)).borrow(), |x| x.shape())
     }
 
@@ -353,13 +353,13 @@ where
     }
 }
 
-impl<'a, T> TensorLike<'a> for Tensor<T>
+impl<T> TensorLike for Tensor<T>
 where
     T: Numeric,
 {
     type Elem = T;
-    type ShapeReturn = &'a Vec<usize>;
-    fn shape(&self) -> Self::ShapeReturn {
+    type ShapeReturn<'a> = &'a Vec<usize> where Self : 'a ;
+    fn shape(&self) -> Self::ShapeReturn<'_> {
         &self.shape
     }
 
@@ -394,7 +394,7 @@ where
 impl<T, U> Add<&U> for &Tensor<T>
 where
     T: Numeric,
-    U: for<'b> TensorLike<'b, Elem = T>,
+    U: TensorLike<Elem = T>,
 {
     type Output = Tensor<T>;
 
@@ -444,7 +444,7 @@ where
 impl<T, U> Mul<&U> for &Tensor<T>
 where
     T: Numeric,
-    U: for<'b> TensorLike<'b, Elem = T>,
+    U: TensorLike<Elem = T>,
 {
     type Output = Tensor<T>;
 
