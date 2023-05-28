@@ -38,7 +38,7 @@ fn tanh_derivative<T: Numeric + Real>(tensor: Tensor<T>) -> Tensor<T> {
     let length = tensor.shape().iter().fold(1, |acc, x| acc * *x);
     let mut array = Vec::with_capacity(length);
     for &elem in ElementIterator::new(&tensor) {
-        let v = T::one() - T::one() / elem.tanh().powi(2);
+        let _v = T::one() - T::one() / elem.tanh().powi(2);
         array.push(elem.tanh());
     }
     Tensor::new(array, tensor.shape().clone())

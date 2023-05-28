@@ -1,7 +1,7 @@
 use super::numeric::*;
 use super::utils::IndexIterator;
 use crate::tensor::{SliceRange, Tensor, TensorView};
-use std::ops::{Add, Deref, Index, Mul};
+use std::ops::{Deref};
 
 pub trait TensorLike {
     type Elem: Numeric;
