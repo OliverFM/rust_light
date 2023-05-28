@@ -1,4 +1,5 @@
-use super::tensor::{Numeric, Tensor, TensorLike};
+use super::tensor::{ElementIterator, Numeric, Tensor, TensorLike};
+use num::traits::real::Real;
 
 pub struct LinearLayer<T>
 where
@@ -14,7 +15,7 @@ where
 {
     pub fn forward<U>(&self, batch: &U) -> Tensor<T>
     where
-        U: for<'b> TensorLike<'b, Elem = T>,
+        U: TensorLike<Elem = T>,
     {
         let y = &self.weights * batch;
         println!("y.shape()={:?}", y.shape());
@@ -22,6 +23,40 @@ where
 
         &y + &self.bias
     }
+}
+
+fn tanh<T: Numeric + Real>(tensor: Tensor<T>) -> Tensor<T> {
+    let length = tensor.shape().iter().fold(1, |acc, x| acc * *x);
+    let mut array = Vec::with_capacity(length);
+    for &elem in ElementIterator::new(&tensor) {
+        array.push(elem.tanh());
+    }
+    Tensor::new(array, tensor.shape().clone())
+}
+
+fn tanh_derivative<T: Numeric + Real>(tensor: Tensor<T>) -> Tensor<T> {
+    let length = tensor.shape().iter().fold(1, |acc, x| acc * *x);
+    let mut array = Vec::with_capacity(length);
+    for &elem in ElementIterator::new(&tensor) {
+        let _v = T::one() - T::one() / elem.tanh().powi(2);
+        array.push(elem.tanh());
+    }
+    Tensor::new(array, tensor.shape().clone())
+}
+
+#[test]
+fn test_tanh_derivative() {
+    let input = Tensor::new((0..64).collect(), vec![4, 4, 4]);
+    // let epsilon = 1e-7 as f64;
+    // let epsilon_tensor = Tensor::new_with_filler(epsilon, vec![4, 4, 4]);
+    // let perturbed_input = &input + &epsilon_tensor;
+    // let output = tanh(input);
+    // let output_perturbed = tanh(perturbed_input);
+    // let numerical_derivative = (1 / epsilon) * (output + (-1.0) * output_perturbed);
+    // let calculated_derivative = tanh_derivative(output);
+
+    // let abs_diff = (numerical_derivative + (-1.0) * calculated_derivative).abs();
+    // assert!(abs_diff.sum() / 64.0 <= 1e-5);
 }
 
 #[test]

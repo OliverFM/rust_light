@@ -3,7 +3,7 @@ use crate::tensor::TensorLike;
 
 pub struct ElementIterator<'b, T, U>
 where
-    U: for<'a> TensorLike<'a, Elem = T>,
+    U: TensorLike<Elem = T>,
     T: Numeric,
 {
     index: Vec<usize>,
@@ -13,7 +13,7 @@ where
 
 impl<'b, T, U> ElementIterator<'b, T, U>
 where
-    U: for<'a> TensorLike<'a, Elem = T>,
+    U: TensorLike<Elem = T>,
     T: Numeric,
 {
     pub fn new(tensor_like: &'b U) -> ElementIterator<'b, T, U> {
@@ -27,7 +27,7 @@ where
 
 impl<'b, T: 'b, U> Iterator for ElementIterator<'b, T, U>
 where
-    U: for<'a> TensorLike<'a, Elem = T>,
+    U: TensorLike<Elem = T>,
     T: Numeric,
 {
     type Item = &'b T;
@@ -92,7 +92,8 @@ impl Iterator for IndexIterator {
     }
 }
 
-pub fn increment_index(index: &mut [usize], shape: &[usize]) -> bool {
+use std::ops::Deref;
+pub fn increment_index<V: Deref<Target = Vec<usize>>>(index: &mut [usize], shape: V) -> bool {
     let mut carry = 1;
     for i in (0..index.len()).rev() {
         let v = index[i];

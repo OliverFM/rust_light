@@ -56,12 +56,13 @@ where
     }
 }
 
-impl<T> TensorLike<'_> for TensorView<'_, T>
+impl<T> TensorLike for TensorView<'_, T>
 where
     T: Numeric,
 {
     type Elem = T;
-    fn shape(&self) -> &Vec<usize> {
+    type ShapeReturn<'a> = &'a Vec<usize> where Self: 'a ;
+    fn shape(&self) -> Self::ShapeReturn<'_> {
         &self.shape
     }
 
@@ -92,10 +93,10 @@ where
 impl<'a, T, U> PartialEq<U> for TensorView<'a, T>
 where
     T: Numeric,
-    U: TensorLike<'a, Elem = T>,
+    U: TensorLike<Elem = T>,
 {
     fn eq(&self, other: &U) -> bool {
-        if other.shape() != &self.shape {
+        if *other.shape() != self.shape {
             return false;
         }
 

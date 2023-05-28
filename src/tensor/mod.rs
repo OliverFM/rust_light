@@ -3,15 +3,18 @@ mod tensor_like;
 mod tensor_view;
 mod utils;
 
+use num::traits::real::Real;
 pub use numeric::*;
 pub use tensor_like::*;
 pub use tensor_view::*;
 pub use utils::*;
 
 use itertools::{EitherOrBoth::*, Itertools};
+use std::cell::{Ref, RefCell};
 use std::cmp::{max, PartialEq};
 use std::convert::From;
 use std::ops::{Add, Index, Mul};
+use std::rc::Rc;
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct SliceRange {
@@ -33,6 +36,44 @@ impl SliceRange {
     }
 }
 
+#[derive(Debug, PartialEq, Clone)]
+pub struct UserTensor<T: Numeric>(Rc<RefCell<Tensor<T>>>);
+
+impl<T> TensorLike for UserTensor<T>
+where
+    T: Numeric,
+{
+    type Elem = T;
+    type ShapeReturn<'a> = Ref<'a, Vec<usize>> where Self: 'a;
+
+    fn shape(&self) -> Self::ShapeReturn<'_> {
+        Ref::map((*(self.0)).borrow(), |x| x.shape())
+    }
+
+    fn sum(&self) -> Self::Elem {
+        todo!()
+    }
+
+    fn tensor(&self) -> &Tensor<Self::Elem> {
+        todo!()
+    }
+
+    fn to_tensor(&self) -> Tensor<Self::Elem> {
+        (*(self.0)).borrow().clone()
+    }
+}
+
+// DEBUG: disabling test till more features are in
+// #[test]
+// fn test_user_tensor_multiplication() {
+//     let v = vec![0, 1, 2, 3];
+//     let matrix = UserTensor(Rc::new(RefCell::new(Tensor::new(v, vec![2, 2])))); // [[0,1],[2,3]]
+//     let shape = vec![2, 1];
+//     let e1 = Tensor::new(vec![0, 1], vec![2, 1]);
+//
+//     assert_eq!(matrix.bmm(&e1), Tensor::new(vec![1, 3], shape.clone()));
+// }
+//
 /// The core `struct` in this library.
 #[derive(Debug, PartialEq, Clone)]
 pub struct Tensor<T>
@@ -41,6 +82,24 @@ where
 {
     array: Vec<T>, // later on, I will need unsafe code to replace this with a statically sized type
     shape: Vec<usize>, // TODO: convert to let this be a slice
+    grad: Vec<T>,
+    requires_grad: bool,
+    parents: Vec<UserTensor<T>>,
+}
+
+impl<T> Default for Tensor<T>
+where
+    T: Numeric,
+{
+    fn default() -> Self {
+        Tensor {
+            requires_grad: false,
+            shape: vec![],
+            grad: vec![],
+            array: vec![],
+            parents: vec![],
+        }
+    }
 }
 
 impl<T> From<T> for Tensor<T>
@@ -51,6 +110,7 @@ where
         Tensor {
             array: vec![value],
             shape: vec![],
+            ..Default::default()
         }
     }
 }
@@ -71,7 +131,11 @@ where
         let mut shape = vec![shapes.len()];
         shape.extend_from_slice(&shapes[0]); // TODO: make this more by chaining iterators before so that we have shapes[0] is a dummy value
         let shape = shape;
-        Tensor { array, shape }
+        Tensor {
+            array,
+            shape,
+            ..Default::default()
+        }
     }
 }
 
@@ -93,6 +157,19 @@ where
 {
     tensor: &'a Tensor<T>,
     shape: &'a Vec<usize>, // TODO: convert to let this be a slice
+}
+
+impl<T> Tensor<T>
+where
+    T: Numeric + Real,
+{
+    fn abs(&self) -> Self {
+        let mut result = Tensor::new_empty(self.shape().clone());
+        for &elem in self.array.iter() {
+            result.array.push(elem.abs())
+        }
+        result
+    }
 }
 
 impl<T> Tensor<T>
@@ -168,6 +245,7 @@ where
         }
         Ok(global_idx)
     }
+
     fn new_empty(shape: Vec<usize>) -> Tensor<T> {
         let mut total = 1;
         for &dim in shape.iter() {
@@ -177,6 +255,7 @@ where
         Tensor {
             array: Vec::with_capacity(total),
             shape,
+            ..Default::default()
         }
     }
     pub fn new_with_filler(shape: Vec<usize>, filler: T) -> Tensor<T> {
@@ -189,6 +268,7 @@ where
         let mut tensor = Tensor {
             array: Vec::with_capacity(total),
             shape,
+            ..Default::default()
         };
         for _ in 0..total {
             tensor.array.push(filler);
@@ -200,6 +280,7 @@ where
         Tensor {
             array: vec![scalar],
             shape: vec![1],
+            ..Default::default()
         }
     }
     pub fn new(array: Vec<T>, shape: Vec<usize>) -> Tensor<T> {
@@ -208,7 +289,11 @@ where
             len *= dim;
         }
         assert_eq!(len, array.len());
-        Tensor { array, shape }
+        Tensor {
+            array,
+            shape,
+            ..Default::default()
+        }
     }
 
     pub fn view(&self, shape: Vec<SliceRange>) -> TensorView<'_, T> {
@@ -270,12 +355,13 @@ where
     }
 }
 
-impl<'a, T> TensorLike<'a> for Tensor<T>
+impl<T> TensorLike for Tensor<T>
 where
     T: Numeric,
 {
     type Elem = T;
-    fn shape(&self) -> &Vec<usize> {
+    type ShapeReturn<'a> = &'a Vec<usize> where Self : 'a ;
+    fn shape(&self) -> Self::ShapeReturn<'_> {
         &self.shape
     }
 
@@ -310,7 +396,7 @@ where
 impl<T, U> Add<&U> for &Tensor<T>
 where
     T: Numeric,
-    U: for<'b> TensorLike<'b, Elem = T>,
+    U: TensorLike<Elem = T>,
 {
     type Output = Tensor<T>;
 
@@ -360,7 +446,7 @@ where
 impl<T, U> Mul<&U> for &Tensor<T>
 where
     T: Numeric,
-    U: for<'b> TensorLike<'b, Elem = T>,
+    U: TensorLike<Elem = T>,
 {
     type Output = Tensor<T>;
 
