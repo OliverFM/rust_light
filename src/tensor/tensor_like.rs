@@ -12,9 +12,7 @@ pub trait TensorLike {
     where
         Self: 'a;
 
-    fn get(&self, index: &Vec<usize>) -> Result<&Self::Elem, String> {
-        (*self.tensor()).get(index)
-    }
+    fn get(&self, index: &Vec<usize>) -> Result<&Self::Elem, String>;
 
     fn shape(&self) -> Self::ShapeReturn<'_>;
 
@@ -109,7 +107,8 @@ pub trait TensorLike {
                         self_index[self_index_len - 1] = k;
                         right_index[0] = k;
                         val = val
-                            + *self.get(&self_index).unwrap() * *right.get(&right_index).unwrap();
+                            + *self.get(&self_index).unwrap().deref()
+                                * (*right.get(&right_index).unwrap().deref());
                     }
                     result.array.push(val);
                 }

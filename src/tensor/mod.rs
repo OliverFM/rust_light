@@ -39,7 +39,7 @@ impl SliceRange {
 /// Idea: Drop the RefCell. Make Tensors immutable. Then make MutableTensor which is not TensorLike
 /// Note: would need to figure out parents of the RawTensor before making it immutable
 #[derive(Debug, PartialEq, Clone)]
-pub struct RcTensor<T: Numeric>(Rc<RefCell<RawTensor<T>>>);
+pub struct RcTensor<T: Numeric>(Rc<RawTensor<T>>);
 
 impl<T> Deref for RcTensor<T>
 where
@@ -48,42 +48,40 @@ where
     type Target = RawTensor<T>;
 
     fn deref(&self) -> &Self::Target {
-        let ref_cell: &RefCell<RawTensor<T>> = self.0.deref();
-        let raw_tensor_ref: &RawTensor<T> = Ref::deref(&ref_cell.borrow());
-        raw_tensor_ref
+        self.0.deref()
     }
 }
 
 impl<T: Numeric> RcTensor<T> {
     fn from_raw(raw_tensor: RawTensor<T>) -> RcTensor<T> {
-        RcTensor(Rc::new(RefCell::new(raw_tensor)))
+        RcTensor(Rc::new(raw_tensor))
     }
 
     fn new_empty(shape: Vec<usize>) -> RcTensor<T> {
         let raw_tensor = RawTensor::new_empty(shape);
-        RcTensor(Rc::new(RefCell::new(raw_tensor)))
+        RcTensor(Rc::new(raw_tensor))
     }
     pub fn new_with_filler(shape: Vec<usize>, filler: T) -> RcTensor<T> {
         let raw_tensor = RawTensor::new_with_filler(shape, filler);
-        RcTensor(Rc::new(RefCell::new(raw_tensor)))
+        RcTensor(Rc::new(raw_tensor))
     }
 
     pub fn scalar(scalar: T) -> RcTensor<T> {
         let raw_tensor = RawTensor::scalar(scalar);
-        RcTensor(Rc::new(RefCell::new(raw_tensor)))
+        RcTensor(Rc::new(raw_tensor))
     }
     pub fn new(array: Vec<T>, shape: Vec<usize>) -> RcTensor<T> {
         let raw_tensor = RawTensor::new(array, shape);
-        RcTensor(Rc::new(RefCell::new(raw_tensor)))
+        RcTensor(Rc::new(raw_tensor))
     }
 
     pub fn view(&self, shape: Vec<SliceRange>) -> TensorView<T> {
         TensorView::new(self.clone(), shape)
     }
 
-    fn set(&mut self, index: &Vec<usize>, value: T) -> Result<(), String> {
-        self.0.borrow().set(index, value)
-    }
+    // fn set(&mut self, index: &Vec<usize>, value: T) -> Result<(), String> {
+    //     self.0.borrow().set(index, value)
+    // }
 
     /// ```
     /// # use rust_light::tensor::*;
@@ -98,11 +96,11 @@ impl<T: Numeric> RcTensor<T> {
     /// );
     /// ```
     fn get(&self, index: &Vec<usize>) -> Result<&T, String> {
-        self.0.borrow().get(index)
+        self.deref().get(index)
     }
 
     fn get_with_offset(&self, index: &Vec<usize>, offset: &Vec<SliceRange>) -> Result<&T, String> {
-        self.0.borrow().get_with_offset(index, offset)
+        self.deref().get_with_offset(index, offset)
     }
 }
 
@@ -111,23 +109,26 @@ where
     T: Numeric,
 {
     type Elem = T;
-    type ShapeReturn<'a> = Ref<'a, Vec<usize>> where Self: 'a;
-    type TensorRef<'a> = Ref<'a, RawTensor<Self::Elem>> where Self: 'a;
+    type ShapeReturn<'a> = &'a Vec<usize> where Self: 'a;
+    type TensorRef<'a> = RcTensor<Self::Elem> where Self: 'a;
 
     fn shape(&self) -> Self::ShapeReturn<'_> {
-        Ref::map((*(self.0)).borrow(), |x| x.shape())
+        self.deref().shape()
     }
 
+    fn get(&self, index: &Vec<usize>) -> Result<&Self::Elem, String> {
+        self.deref().get(index)
+    }
     fn sum(&self) -> Self::Elem {
         todo!()
     }
 
     fn tensor(&self) -> Self::TensorRef<'_> {
-        self.0.borrow()
+        self.clone()
     }
 
     fn to_tensor(&self) -> RawTensor<Self::Elem> {
-        (*(self.0)).borrow().clone()
+        todo!()
     }
 
     fn slice(&self, offset: Vec<SliceRange>) -> TensorView<T> {
@@ -465,6 +466,9 @@ where
     fn slice(&self, offset: Vec<SliceRange>) -> TensorView<T> {
         TensorView::new(RcTensor::from_raw(self.clone()), offset)
     }
+    fn get(&self, index: &Vec<usize>) -> Result<&Self::Elem, String> {
+        self.get(index)
+    }
 }
 
 impl<T, U> Add<&U> for &RcTensor<T>
@@ -474,7 +478,7 @@ where
 {
     type Output = RcTensor<T>;
     fn add(self, right: &U) -> Self::Output {
-        let result = self.0.borrow().add(right);
+        let result = self.deref().add(right);
         RcTensor::from_raw(result)
     }
 }

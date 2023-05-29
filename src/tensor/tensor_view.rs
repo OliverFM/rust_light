@@ -22,11 +22,7 @@ where
     type Output = T;
 
     fn index(&self, index: &Vec<usize>) -> &Self::Output {
-        self.tensor
-            .0
-            .borrow()
-            .get_with_offset(index, &self.offset)
-            .unwrap()
+        &self.tensor.get_with_offset(index, &self.offset).unwrap()
     }
 }
 
@@ -51,7 +47,8 @@ where
         }
     }
     pub fn to_tensor(&self) -> RawTensor<T> {
-        self.tensor.0.borrow().clone()
+        // self.tensor.clone()
+        todo!()
     }
 }
 
@@ -85,11 +82,9 @@ where
     fn get(&self, index: &Vec<usize>) -> Result<&T, String> {
         let idx = self
             .tensor
-            .0
-            .borrow()
             .get_global_index(index, Some(&self.offset))
             .unwrap();
-        Ok(&self.tensor.0.borrow().array[idx])
+        Ok(&self.tensor.array[idx])
     }
 
     fn slice(&self, offset: Vec<SliceRange>) -> TensorView<T> {

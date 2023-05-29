@@ -28,7 +28,7 @@ where
 fn tanh<T: Numeric + Real>(tensor: RcTensor<T>) -> RcTensor<T> {
     let length = tensor.shape().iter().fold(1, |acc, x| acc * *x);
     let mut array = Vec::with_capacity(length);
-    for &elem in ElementIterator::new(&tensor) {
+    for elem in ElementIterator::new(&tensor) {
         array.push(elem.tanh());
     }
     RcTensor::new(array, tensor.shape().clone())
@@ -37,7 +37,7 @@ fn tanh<T: Numeric + Real>(tensor: RcTensor<T>) -> RcTensor<T> {
 fn tanh_derivative<T: Numeric + Real>(tensor: RcTensor<T>) -> RcTensor<T> {
     let length = tensor.shape().iter().fold(1, |acc, x| acc * *x);
     let mut array = Vec::with_capacity(length);
-    for &elem in ElementIterator::new(&tensor) {
+    for elem in ElementIterator::new(&tensor) {
         let _v = T::one() - T::one() / elem.tanh().powi(2);
         array.push(elem.tanh());
     }
