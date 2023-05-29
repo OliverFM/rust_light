@@ -47,9 +47,9 @@ where
 
 #[test]
 fn test_element_iterator() {
-    use crate::tensor::{SliceRange, Tensor};
+    use crate::tensor::{RcTensor, SliceRange};
     let v = [1, 2, 3];
-    let tensor = Tensor::from(v);
+    let tensor = RcTensor::from(v);
     let view = tensor.view(vec![SliceRange::new(0, 3)]);
     let tensor_element_iterator = ElementIterator::new(&tensor);
     let element_iterator = ElementIterator::new(&view);

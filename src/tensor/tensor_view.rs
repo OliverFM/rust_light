@@ -1,19 +1,21 @@
 use super::numeric::*;
-use crate::tensor::{ElementIterator, FrozenTensorView, SliceRange, Tensor, TensorLike};
+use crate::tensor::{ElementIterator, RawTensor, RcTensor, SliceRange, TensorLike};
+
 use std::cmp::PartialEq;
-use std::ops::Index;
+use std::ops::{Index};
 
 #[derive(Debug, Clone)]
-pub struct TensorView<'a, T>
+pub struct TensorView<T>
 where
     T: Numeric,
 {
     // TODO: convert this to look at slices of tensors. e.g. tensor[..1]
-    tensor: &'a Tensor<T>,
+    // tensor: &'a Tensor<T>,
+    tensor: RcTensor<T>,
     shape: Vec<usize>,
     offset: Vec<SliceRange>,
 }
-impl<'a, T> Index<&Vec<usize>> for TensorView<'a, T>
+impl<T> Index<&Vec<usize>> for TensorView<T>
 where
     T: Numeric,
 {
@@ -25,14 +27,14 @@ where
 }
 
 // a borrowed Tensor, but with a new shape.
-impl<'a, T> TensorView<'a, T>
+impl<T> TensorView<T>
 where
     T: Numeric,
 {
-    pub fn new(tensor: &Tensor<T>, offset: Vec<SliceRange>) -> TensorView<T> {
-        assert_eq!(offset.len(), tensor.shape.len());
+    pub fn new(tensor: RcTensor<T>, offset: Vec<SliceRange>) -> TensorView<T> {
+        assert_eq!(offset.len(), tensor.shape().len());
         let mut shape = Vec::with_capacity(offset.len());
-        for (slice_range, &tensor_dim) in offset.iter().zip(tensor.shape.iter()) {
+        for (slice_range, &tensor_dim) in offset.iter().zip(tensor.shape().iter()) {
             // NOTE: assuming that all intervals are half open, for now.
             // TODO: add a better parser once I have generalised this
             assert!(slice_range.end <= tensor_dim);
@@ -44,33 +46,30 @@ where
             shape, // TODO: fix this
         }
     }
-    pub fn to_tensor(&self) -> Tensor<T> {
-        (*self.tensor).clone()
-    }
-
-    pub fn freeze(&self) -> FrozenTensorView<'_, T> {
-        FrozenTensorView {
-            tensor: self.tensor,
-            shape: &self.shape,
-        }
+    pub fn to_tensor(&self) -> RawTensor<T> {
+        // self.tensor.clone()
+        todo!()
     }
 }
 
-impl<T> TensorLike for TensorView<'_, T>
+impl<T> TensorLike for TensorView<T>
 where
     T: Numeric,
 {
     type Elem = T;
     type ShapeReturn<'a> = &'a Vec<usize> where Self: 'a ;
+    type TensorRef<'a>= RcTensor<T> where Self: 'a; // &'tensor Tensor<Self::Elem> where Self : 'tensor;
+    type ResultTensorType<'a>= RcTensor<T> where Self: 'a; // &'tensor Tensor<Self::Elem> where Self : 'tensor;
     fn shape(&self) -> Self::ShapeReturn<'_> {
         &self.shape
     }
 
-    fn tensor(&self) -> &Tensor<T> {
-        self.tensor
+    fn tensor(&self) -> Self::TensorRef<'_> {
+        // Ref::clone(&self.tensor)
+        self.tensor.clone()
     }
 
-    fn to_tensor(&self) -> Tensor<T> {
+    fn to_tensor(&self) -> RawTensor<T> {
         todo!();
         // let mut tensor = Tensor::new_empty(self.shape);
     }
@@ -88,14 +87,24 @@ where
             .unwrap();
         Ok(&self.tensor.array[idx])
     }
+
+    fn slice(&self, offset: Vec<SliceRange>) -> TensorView<T> {
+        TensorView::new(self.tensor(), offset)
+    }
+    fn bmm<U>(&self, right: &U) -> Self::ResultTensorType<'_>
+    where
+        U: TensorLike<Elem = Self::Elem>,
+    {
+        self.bmm_rc(right)
+    }
 }
 
-impl<'a, T, U> PartialEq<U> for TensorView<'a, T>
+impl<'a, T, V> PartialEq<V> for TensorView<T>
 where
     T: Numeric,
-    U: TensorLike<Elem = T>,
+    V: TensorLike<Elem = T>,
 {
-    fn eq(&self, other: &U) -> bool {
+    fn eq(&self, other: &V) -> bool {
         if *other.shape() != self.shape {
             return false;
         }
@@ -111,7 +120,7 @@ where
 
 #[test]
 fn test_sum_tensor_view() {
-    let tensor = Tensor::from([
+    let tensor = RawTensor::from([
         [[0, 1, 2, 3], [2, 3, 4, 5], [3, 4, 5, 6]],
         [[0, 1, 2, 3], [2, 3, 4, 5], [3, 4, 5, 6]],
     ]);
