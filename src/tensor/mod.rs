@@ -86,8 +86,8 @@ impl<T: Numeric> RcTensor<T> {
     /// ```
     /// # use rust_light::tensor::*;
     /// let v = vec![0, 1, 2, 3];
-    /// let matrix = Tensor::new(v, vec![2, 2]);
-    /// let tensor = Tensor::new((0..16).collect(), vec![2, 2, 1, 2, 2]);
+    /// let matrix = RcTensor::new(v, vec![2, 2]);
+    /// let tensor = RcTensor::new((0..16).collect(), vec![2, 2, 1, 2, 2]);
     ///
     /// assert_eq!(matrix.get(&vec![0,1]),matrix.get(&vec![0,0,1]));
     /// assert_eq!(matrix.get(&vec![0,1]),matrix.get(&vec![0,4,0,1]));
@@ -111,6 +111,7 @@ where
     type Elem = T;
     type ShapeReturn<'a> = &'a Vec<usize> where Self: 'a;
     type TensorRef<'a> = RcTensor<Self::Elem> where Self: 'a;
+    type ResultTensorType<'a>= RcTensor<T> where Self: 'a; // &'tensor Tensor<Self::Elem> where Self : 'tensor;
 
     fn shape(&self) -> Self::ShapeReturn<'_> {
         self.deref().shape()
@@ -133,6 +134,12 @@ where
 
     fn slice(&self, offset: Vec<SliceRange>) -> TensorView<T> {
         TensorView::new(self.clone(), offset)
+    }
+    fn bmm<U>(&self, right: &U) -> Self::ResultTensorType<'_>
+    where
+        U: TensorLike<Elem = Self::Elem>,
+    {
+        self.bmm_rc(right)
     }
 }
 // DEBUG: disabling test till more features are in
@@ -387,7 +394,7 @@ where
     }
 
     // pub fn view(&self, shape: Vec<SliceRange>) -> TensorView<T> {
-    //     let tensor = Tensor::from_raw(self);
+    //     let tensor = RcTensor::from_raw(self);
     //     TensorView::new(tensor, shape)
     // }
 
@@ -404,8 +411,8 @@ where
     /// ```
     /// # use rust_light::tensor::*;
     /// let v = vec![0, 1, 2, 3];
-    /// let matrix = Tensor::new(v, vec![2, 2]);
-    /// let tensor = Tensor::new((0..16).collect(), vec![2, 2, 1, 2, 2]);
+    /// let matrix = RcTensor::new(v, vec![2, 2]);
+    /// let tensor = RcTensor::new((0..16).collect(), vec![2, 2, 1, 2, 2]);
     ///
     /// assert_eq!(matrix.get(&vec![0,1]),matrix.get(&vec![0,0,1]));
     /// assert_eq!(matrix.get(&vec![0,1]),matrix.get(&vec![0,4,0,1]));
@@ -446,6 +453,7 @@ where
     type Elem = T;
     type ShapeReturn<'a> = &'a Vec<usize> where Self : 'a ;
     type TensorRef<'tensor> = &'tensor RawTensor<Self::Elem> where Self : 'tensor;
+    type ResultTensorType<'a>= RawTensor<T> where Self: 'a; // &'tensor Tensor<Self::Elem> where Self : 'tensor;
     fn shape(&self) -> Self::ShapeReturn<'_> {
         &self.shape
     }
@@ -468,6 +476,12 @@ where
     }
     fn get(&self, index: &Vec<usize>) -> Result<&Self::Elem, String> {
         self.get(index)
+    }
+    fn bmm<U>(&self, right: &U) -> Self::ResultTensorType<'_>
+    where
+        U: TensorLike<Elem = Self::Elem>,
+    {
+        self.bmm_raw(right)
     }
 }
 
@@ -493,8 +507,8 @@ where
     /// ```
     /// # use rust_light::tensor::*;
     /// let v = vec![0, 1, 2, 3];
-    /// let matrix = Tensor::new(v, vec![2, 2]);
-    /// let tensor = Tensor::new((0..16).collect(), vec![2, 2, 1, 2, 2]);
+    /// let matrix = RcTensor::new(v, vec![2, 2]);
+    /// let tensor = RcTensor::new((0..16).collect(), vec![2, 2, 1, 2, 2]);
     ///
     /// assert_eq!(matrix.get(&vec![0,1]),matrix.get(&vec![0,0,1]));
     /// assert_eq!(matrix.get(&vec![0,1]),matrix.get(&vec![0,4,0,1]));
@@ -544,7 +558,7 @@ where
         if self.shape.len() == 1 {
             return self.dot(right);
         }
-        self.bmm(right)
+        self.bmm_raw(right)
     }
 }
 impl<T, U> Mul<&U> for &RcTensor<T>
@@ -559,6 +573,6 @@ where
             let raw_tensor = self.dot(right);
             return RcTensor::from_raw(raw_tensor);
         }
-        RcTensor::from_raw(self.bmm(right))
+        self.bmm(right)
     }
 }

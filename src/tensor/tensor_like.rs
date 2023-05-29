@@ -1,6 +1,6 @@
 use super::numeric::*;
 use super::utils::IndexIterator;
-use crate::tensor::{RawTensor, SliceRange, TensorView};
+use crate::tensor::{RawTensor, RcTensor, SliceRange, TensorView};
 use std::ops::Deref;
 
 pub trait TensorLike {
@@ -9,6 +9,9 @@ pub trait TensorLike {
     where
         Self: 'a;
     type TensorRef<'a>: Deref<Target = RawTensor<Self::Elem>>
+    where
+        Self: 'a;
+    type ResultTensorType<'a>: TensorLike
     where
         Self: 'a;
 
@@ -65,18 +68,31 @@ pub trait TensorLike {
     /// ```
     /// # use rust_light::tensor::*;
     /// let v = vec![0, 1, 2, 3];
-    /// let matrix = Tensor::new(v, vec![2, 2]);
+    /// let matrix = RcTensor::new(v, vec![2, 2]);
     /// let shape = vec![2, 1];
-    /// let e1 = Tensor::new(vec![0, 1], vec![2, 1]);
-    /// let e2 = Tensor::new(vec![1, 0], vec![2, 1]);
-    /// let diag = Tensor::new(vec![1, 1], vec![2, 1]);
+    /// let e1 = RcTensor::new(vec![0, 1], vec![2, 1]);
+    /// let e2 = RcTensor::new(vec![1, 0], vec![2, 1]);
+    /// let diag = RcTensor::new(vec![1, 1], vec![2, 1]);
     /// let r = matrix.bmm(&diag);
     ///
     /// assert_eq!(r.shape(), &shape);
-    /// assert_eq!(r, Tensor::new(vec![1, 5], shape.clone()));
-    /// assert_eq!(matrix.bmm(&e1), Tensor::new(vec![1, 3], shape.clone()));
+    /// assert_eq!(r, RcTensor::new(vec![1, 5], shape.clone()));
+    /// assert_eq!(matrix.bmm(&e1), RcTensor::new(vec![1, 3], shape.clone()));
     /// ```
-    fn bmm<U>(&self, right: &U) -> RawTensor<Self::Elem>
+    fn bmm<U>(&self, right: &U) -> Self::ResultTensorType<'_>
+    where
+        U: TensorLike<Elem = Self::Elem>;
+
+    #[inline]
+    fn bmm_rc<U>(&self, right: &U) -> RcTensor<Self::Elem>
+    where
+        U: TensorLike<Elem = Self::Elem>,
+    {
+        RcTensor::from_raw(self.bmm_raw(right))
+    }
+
+    #[inline]
+    fn bmm_raw<U>(&self, right: &U) -> RawTensor<Self::Elem>
     where
         U: TensorLike<Elem = Self::Elem>,
     {

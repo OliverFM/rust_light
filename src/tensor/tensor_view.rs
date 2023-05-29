@@ -59,6 +59,7 @@ where
     type Elem = T;
     type ShapeReturn<'a> = &'a Vec<usize> where Self: 'a ;
     type TensorRef<'a>= RcTensor<T> where Self: 'a; // &'tensor Tensor<Self::Elem> where Self : 'tensor;
+    type ResultTensorType<'a>= RcTensor<T> where Self: 'a; // &'tensor Tensor<Self::Elem> where Self : 'tensor;
     fn shape(&self) -> Self::ShapeReturn<'_> {
         &self.shape
     }
@@ -89,6 +90,12 @@ where
 
     fn slice(&self, offset: Vec<SliceRange>) -> TensorView<T> {
         TensorView::new(self.tensor(), offset)
+    }
+    fn bmm<U>(&self, right: &U) -> Self::ResultTensorType<'_>
+    where
+        U: TensorLike<Elem = Self::Elem>,
+    {
+        self.bmm_rc(right)
     }
 }
 
