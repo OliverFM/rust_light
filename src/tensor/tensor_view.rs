@@ -1,5 +1,5 @@
 use super::numeric::*;
-use crate::tensor::{ElementIterator, RawTensor, SliceRange, Tensor, TensorLike};
+use crate::tensor::{ElementIterator, RawTensor, RcTensor, SliceRange, TensorLike};
 use std::cell::Ref;
 use std::cmp::PartialEq;
 use std::ops::{Deref, Index};
@@ -11,7 +11,7 @@ where
 {
     // TODO: convert this to look at slices of tensors. e.g. tensor[..1]
     // tensor: &'a Tensor<T>,
-    tensor: Tensor<T>,
+    tensor: RcTensor<T>,
     shape: Vec<usize>,
     offset: Vec<SliceRange>,
 }
@@ -35,7 +35,7 @@ impl<T> TensorView<T>
 where
     T: Numeric,
 {
-    pub fn new(tensor: Tensor<T>, offset: Vec<SliceRange>) -> TensorView<T> {
+    pub fn new(tensor: RcTensor<T>, offset: Vec<SliceRange>) -> TensorView<T> {
         assert_eq!(offset.len(), tensor.shape().len());
         let mut shape = Vec::with_capacity(offset.len());
         for (slice_range, &tensor_dim) in offset.iter().zip(tensor.shape().iter()) {
@@ -61,7 +61,7 @@ where
 {
     type Elem = T;
     type ShapeReturn<'a> = &'a Vec<usize> where Self: 'a ;
-    type TensorRef<'a>= Tensor<T> where Self: 'a; // &'tensor Tensor<Self::Elem> where Self : 'tensor;
+    type TensorRef<'a>= RcTensor<T> where Self: 'a; // &'tensor Tensor<Self::Elem> where Self : 'tensor;
     fn shape(&self) -> Self::ShapeReturn<'_> {
         &self.shape
     }
@@ -90,6 +90,10 @@ where
             .get_global_index(index, Some(&self.offset))
             .unwrap();
         Ok(&self.tensor.0.borrow().array[idx])
+    }
+
+    fn slice(&self, offset: Vec<SliceRange>) -> TensorView<T> {
+        TensorView::new(self.tensor(), offset)
     }
 }
 

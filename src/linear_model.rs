@@ -1,19 +1,19 @@
-use super::tensor::{ElementIterator, Numeric, Tensor, TensorLike};
+use super::tensor::{ElementIterator, Numeric, RcTensor, TensorLike};
 use num::traits::real::Real;
 
 pub struct LinearLayer<T>
 where
     T: Numeric,
 {
-    weights: Tensor<T>,
-    bias: Tensor<T>,
+    weights: RcTensor<T>,
+    bias: RcTensor<T>,
 }
 
 impl<T> LinearLayer<T>
 where
     T: Numeric,
 {
-    pub fn forward<U>(&self, batch: &U) -> Tensor<T>
+    pub fn forward<U>(&self, batch: &U) -> RcTensor<T>
     where
         U: TensorLike<Elem = T>,
     {
@@ -25,28 +25,28 @@ where
     }
 }
 
-fn tanh<T: Numeric + Real>(tensor: Tensor<T>) -> Tensor<T> {
+fn tanh<T: Numeric + Real>(tensor: RcTensor<T>) -> RcTensor<T> {
     let length = tensor.shape().iter().fold(1, |acc, x| acc * *x);
     let mut array = Vec::with_capacity(length);
     for &elem in ElementIterator::new(&tensor) {
         array.push(elem.tanh());
     }
-    Tensor::new(array, tensor.shape().clone())
+    RcTensor::new(array, tensor.shape().clone())
 }
 
-fn tanh_derivative<T: Numeric + Real>(tensor: Tensor<T>) -> Tensor<T> {
+fn tanh_derivative<T: Numeric + Real>(tensor: RcTensor<T>) -> RcTensor<T> {
     let length = tensor.shape().iter().fold(1, |acc, x| acc * *x);
     let mut array = Vec::with_capacity(length);
     for &elem in ElementIterator::new(&tensor) {
         let _v = T::one() - T::one() / elem.tanh().powi(2);
         array.push(elem.tanh());
     }
-    Tensor::new(array, tensor.shape().clone())
+    RcTensor::new(array, tensor.shape().clone())
 }
 
 #[test]
 fn test_tanh_derivative() {
-    let input = Tensor::new((0..64).collect(), vec![4, 4, 4]);
+    let input = RcTensor::new((0..64).collect(), vec![4, 4, 4]);
     // let epsilon = 1e-7 as f64;
     // let epsilon_tensor = Tensor::new_with_filler(epsilon, vec![4, 4, 4]);
     // let perturbed_input = &input + &epsilon_tensor;
@@ -62,12 +62,12 @@ fn test_tanh_derivative() {
 #[test]
 fn test_layer() {
     let layer = LinearLayer {
-        weights: Tensor::new_with_filler(vec![1, 2, 2], 1),
-        bias: Tensor::new_with_filler(vec![1, 2, 1], 1),
+        weights: RcTensor::new_with_filler(vec![1, 2, 2], 1),
+        bias: RcTensor::new_with_filler(vec![1, 2, 1], 1),
     };
-    let input = Tensor::new(vec![1, 2], vec![2, 1]);
+    let input = RcTensor::new(vec![1, 2], vec![2, 1]);
     let res = layer.forward(&input);
-    let expected = Tensor::new(vec![4, 4], vec![1, 2, 1]);
+    let expected = RcTensor::new(vec![4, 4], vec![1, 2, 1]);
 
     assert_eq!(res, expected);
 }

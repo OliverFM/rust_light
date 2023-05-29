@@ -27,9 +27,7 @@ pub trait TensorLike {
     /// for a `TensorView`, for example, the new Tensor is the same shape as the view.
     fn to_tensor(&self) -> RawTensor<Self::Elem>;
 
-    fn slice(&self, offset: Vec<SliceRange>) -> TensorView<Self::Elem> {
-        TensorView::new(*self.tensor(), offset)
-    }
+    fn slice(&self, offset: Vec<SliceRange>) -> TensorView<Self::Elem>;
 
     fn left_scalar_multiplication(&self, &scalar: &Self::Elem) -> RawTensor<Self::Elem> {
         let mut result = RawTensor::new_empty((*self.shape()).clone());

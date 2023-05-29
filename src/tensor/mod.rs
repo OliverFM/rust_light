@@ -13,7 +13,7 @@ use itertools::{EitherOrBoth::*, Itertools};
 use std::cell::{Ref, RefCell};
 use std::cmp::{max, PartialEq};
 use std::convert::From;
-use std::ops::{Add, Index, Mul};
+use std::ops::{Add, Deref, Index, Mul};
 use std::rc::Rc;
 
 #[derive(Debug, PartialEq, Clone)]
@@ -36,30 +36,45 @@ impl SliceRange {
     }
 }
 
+/// Idea: Drop the RefCell. Make Tensors immutable. Then make MutableTensor which is not TensorLike
+/// Note: would need to figure out parents of the RawTensor before making it immutable
 #[derive(Debug, PartialEq, Clone)]
-pub struct Tensor<T: Numeric>(Rc<RefCell<RawTensor<T>>>);
+pub struct RcTensor<T: Numeric>(Rc<RefCell<RawTensor<T>>>);
 
-impl<T: Numeric> Tensor<T> {
-    fn from_raw(raw_tensor: RawTensor<T>) -> Tensor<T> {
-        Tensor(Rc::new(RefCell::new(raw_tensor)))
+impl<T> Deref for RcTensor<T>
+where
+    T: Numeric,
+{
+    type Target = RawTensor<T>;
+
+    fn deref(&self) -> &Self::Target {
+        let ref_cell: &RefCell<RawTensor<T>> = self.0.deref();
+        let raw_tensor_ref: &RawTensor<T> = Ref::deref(&ref_cell.borrow());
+        raw_tensor_ref
+    }
+}
+
+impl<T: Numeric> RcTensor<T> {
+    fn from_raw(raw_tensor: RawTensor<T>) -> RcTensor<T> {
+        RcTensor(Rc::new(RefCell::new(raw_tensor)))
     }
 
-    fn new_empty(shape: Vec<usize>) -> Tensor<T> {
+    fn new_empty(shape: Vec<usize>) -> RcTensor<T> {
         let raw_tensor = RawTensor::new_empty(shape);
-        Tensor(Rc::new(RefCell::new(raw_tensor)))
+        RcTensor(Rc::new(RefCell::new(raw_tensor)))
     }
-    pub fn new_with_filler(shape: Vec<usize>, filler: T) -> Tensor<T> {
+    pub fn new_with_filler(shape: Vec<usize>, filler: T) -> RcTensor<T> {
         let raw_tensor = RawTensor::new_with_filler(shape, filler);
-        Tensor(Rc::new(RefCell::new(raw_tensor)))
+        RcTensor(Rc::new(RefCell::new(raw_tensor)))
     }
 
-    pub fn scalar(scalar: T) -> Tensor<T> {
+    pub fn scalar(scalar: T) -> RcTensor<T> {
         let raw_tensor = RawTensor::scalar(scalar);
-        Tensor(Rc::new(RefCell::new(raw_tensor)))
+        RcTensor(Rc::new(RefCell::new(raw_tensor)))
     }
-    pub fn new(array: Vec<T>, shape: Vec<usize>) -> Tensor<T> {
+    pub fn new(array: Vec<T>, shape: Vec<usize>) -> RcTensor<T> {
         let raw_tensor = RawTensor::new(array, shape);
-        Tensor(Rc::new(RefCell::new(raw_tensor)))
+        RcTensor(Rc::new(RefCell::new(raw_tensor)))
     }
 
     pub fn view(&self, shape: Vec<SliceRange>) -> TensorView<T> {
@@ -91,7 +106,7 @@ impl<T: Numeric> Tensor<T> {
     }
 }
 
-impl<T> TensorLike for Tensor<T>
+impl<T> TensorLike for RcTensor<T>
 where
     T: Numeric,
 {
@@ -114,17 +129,15 @@ where
     fn to_tensor(&self) -> RawTensor<Self::Elem> {
         (*(self.0)).borrow().clone()
     }
+
+    fn slice(&self, offset: Vec<SliceRange>) -> TensorView<T> {
+        TensorView::new(self.clone(), offset)
+    }
 }
 // DEBUG: disabling test till more features are in
+// #[ignore]
 // #[test]
-// fn test_user_tensor_multiplication() {
-//     let v = vec![0, 1, 2, 3];
-//     let matrix = UserTensor(Rc::new(RefCell::new(Tensor::new(v, vec![2, 2])))); // [[0,1],[2,3]]
-//     let shape = vec![2, 1];
-//     let e1 = Tensor::new(vec![0, 1], vec![2, 1]);
-//
-//     assert_eq!(matrix.bmm(&e1), Tensor::new(vec![1, 3], shape.clone()));
-// }
+// fn test_user_tensor_multiplication() {}
 //
 /// The core `struct` in this library.
 #[derive(Debug, PartialEq, Clone)]
@@ -132,11 +145,12 @@ pub struct RawTensor<T>
 where
     T: Numeric,
 {
+    // TODO: consider using const generics to switch to type: Box<[T; N]>
     array: Vec<T>, // later on, I will need unsafe code to replace this with a statically sized type
     shape: Vec<usize>, // TODO: convert to let this be a slice
     grad: Vec<T>,
     requires_grad: bool,
-    parents: Vec<Tensor<T>>,
+    parents: Vec<RcTensor<T>>,
 }
 
 impl<T> Default for RawTensor<T>
@@ -154,35 +168,35 @@ where
     }
 }
 
-impl<T> From<T> for Tensor<T>
+impl<T> From<T> for RcTensor<T>
 where
     T: Numeric,
 {
     fn from(value: T) -> Self {
-        Tensor::from_raw(RawTensor::from(value))
+        RcTensor::from_raw(RawTensor::from(value))
     }
 }
 
-impl<T, U> From<Vec<U>> for Tensor<T>
+impl<T, U> From<Vec<U>> for RcTensor<T>
 where
     T: Numeric,
     RawTensor<T>: From<U>,
 {
-    fn from(value: Vec<U>) -> Tensor<T> {
+    fn from(value: Vec<U>) -> RcTensor<T> {
         let tmp = <RawTensor<T> as From<Vec<U>>>::from(value);
-        Tensor::from_raw(tmp)
+        RcTensor::from_raw(tmp)
     }
 }
 
-impl<T, U, const N: usize> From<[U; N]> for Tensor<T>
+impl<T, U, const N: usize> From<[U; N]> for RcTensor<T>
 where
     T: Numeric,
     RawTensor<T>: From<U>,
     U: Clone,
 {
-    fn from(value: [U; N]) -> Tensor<T> {
+    fn from(value: [U; N]) -> RcTensor<T> {
         let raw_tensor = From::from(value.to_vec());
-        Tensor::from_raw(raw_tensor)
+        RcTensor::from_raw(raw_tensor)
     }
 }
 
@@ -448,17 +462,20 @@ where
     fn to_tensor(&self) -> Self {
         self.clone()
     }
+    fn slice(&self, offset: Vec<SliceRange>) -> TensorView<T> {
+        TensorView::new(RcTensor::from_raw(self.clone()), offset)
+    }
 }
 
-impl<T, U> Add<&U> for &Tensor<T>
+impl<T, U> Add<&U> for &RcTensor<T>
 where
     T: Numeric,
     U: TensorLike<Elem = T>,
 {
-    type Output = Tensor<T>;
+    type Output = RcTensor<T>;
     fn add(self, right: &U) -> Self::Output {
         let result = self.0.borrow().add(right);
-        Tensor::from_raw(result)
+        RcTensor::from_raw(result)
     }
 }
 
@@ -526,18 +543,18 @@ where
         self.bmm(right)
     }
 }
-impl<T, U> Mul<&U> for &Tensor<T>
+impl<T, U> Mul<&U> for &RcTensor<T>
 where
     T: Numeric,
     U: TensorLike<Elem = T>,
 {
-    type Output = Tensor<T>;
+    type Output = RcTensor<T>;
 
     fn mul(self, right: &U) -> Self::Output {
         if self.shape().len() == 1 {
             let raw_tensor = self.dot(right);
-            return Tensor::from_raw(raw_tensor);
+            return RcTensor::from_raw(raw_tensor);
         }
-        Tensor::from_raw(self.bmm(right))
+        RcTensor::from_raw(self.bmm(right))
     }
 }
