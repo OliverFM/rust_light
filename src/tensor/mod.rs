@@ -37,14 +37,67 @@ impl SliceRange {
 }
 
 #[derive(Debug, PartialEq, Clone)]
-pub struct UserTensor<T: Numeric>(Rc<RefCell<Tensor<T>>>);
+pub struct Tensor<T: Numeric>(Rc<RefCell<RawTensor<T>>>);
 
-impl<T> TensorLike for UserTensor<T>
+impl<T: Numeric> Tensor<T> {
+    fn from_raw(raw_tensor: RawTensor<T>) -> Tensor<T> {
+        Tensor(Rc::new(RefCell::new(raw_tensor)))
+    }
+
+    fn new_empty(shape: Vec<usize>) -> Tensor<T> {
+        let raw_tensor = RawTensor::new_empty(shape);
+        Tensor(Rc::new(RefCell::new(raw_tensor)))
+    }
+    pub fn new_with_filler(shape: Vec<usize>, filler: T) -> Tensor<T> {
+        let raw_tensor = RawTensor::new_with_filler(shape, filler);
+        Tensor(Rc::new(RefCell::new(raw_tensor)))
+    }
+
+    pub fn scalar(scalar: T) -> Tensor<T> {
+        let raw_tensor = RawTensor::scalar(scalar);
+        Tensor(Rc::new(RefCell::new(raw_tensor)))
+    }
+    pub fn new(array: Vec<T>, shape: Vec<usize>) -> Tensor<T> {
+        let raw_tensor = RawTensor::new(array, shape);
+        Tensor(Rc::new(RefCell::new(raw_tensor)))
+    }
+
+    pub fn view(&self, shape: Vec<SliceRange>) -> TensorView<T> {
+        TensorView::new(self.clone(), shape)
+    }
+
+    fn set(&mut self, index: &Vec<usize>, value: T) -> Result<(), String> {
+        self.0.borrow().set(index, value)
+    }
+
+    /// ```
+    /// # use rust_light::tensor::*;
+    /// let v = vec![0, 1, 2, 3];
+    /// let matrix = Tensor::new(v, vec![2, 2]);
+    /// let tensor = Tensor::new((0..16).collect(), vec![2, 2, 1, 2, 2]);
+    ///
+    /// assert_eq!(matrix.get(&vec![0,1]),matrix.get(&vec![0,0,1]));
+    /// assert_eq!(matrix.get(&vec![0,1]),matrix.get(&vec![0,4,0,1]));
+    /// assert_eq!(tensor.get(&vec![0,0,0, 0,1]),
+    /// tensor.get(&vec![0,0,10, 0,1])
+    /// );
+    /// ```
+    fn get(&self, index: &Vec<usize>) -> Result<&T, String> {
+        self.0.borrow().get(index)
+    }
+
+    fn get_with_offset(&self, index: &Vec<usize>, offset: &Vec<SliceRange>) -> Result<&T, String> {
+        self.0.borrow().get_with_offset(index, offset)
+    }
+}
+
+impl<T> TensorLike for Tensor<T>
 where
     T: Numeric,
 {
     type Elem = T;
     type ShapeReturn<'a> = Ref<'a, Vec<usize>> where Self: 'a;
+    type TensorRef<'a> = Ref<'a, RawTensor<Self::Elem>> where Self: 'a;
 
     fn shape(&self) -> Self::ShapeReturn<'_> {
         Ref::map((*(self.0)).borrow(), |x| x.shape())
@@ -54,15 +107,14 @@ where
         todo!()
     }
 
-    fn tensor(&self) -> &Tensor<Self::Elem> {
-        todo!()
+    fn tensor(&self) -> Self::TensorRef<'_> {
+        self.0.borrow()
     }
 
-    fn to_tensor(&self) -> Tensor<Self::Elem> {
+    fn to_tensor(&self) -> RawTensor<Self::Elem> {
         (*(self.0)).borrow().clone()
     }
 }
-
 // DEBUG: disabling test till more features are in
 // #[test]
 // fn test_user_tensor_multiplication() {
@@ -76,7 +128,7 @@ where
 //
 /// The core `struct` in this library.
 #[derive(Debug, PartialEq, Clone)]
-pub struct Tensor<T>
+pub struct RawTensor<T>
 where
     T: Numeric,
 {
@@ -84,15 +136,15 @@ where
     shape: Vec<usize>, // TODO: convert to let this be a slice
     grad: Vec<T>,
     requires_grad: bool,
-    parents: Vec<UserTensor<T>>,
+    parents: Vec<Tensor<T>>,
 }
 
-impl<T> Default for Tensor<T>
+impl<T> Default for RawTensor<T>
 where
     T: Numeric,
 {
     fn default() -> Self {
-        Tensor {
+        RawTensor {
             requires_grad: false,
             shape: vec![],
             grad: vec![],
@@ -107,7 +159,39 @@ where
     T: Numeric,
 {
     fn from(value: T) -> Self {
-        Tensor {
+        Tensor::from_raw(RawTensor::from(value))
+    }
+}
+
+impl<T, U> From<Vec<U>> for Tensor<T>
+where
+    T: Numeric,
+    RawTensor<T>: From<U>,
+{
+    fn from(value: Vec<U>) -> Tensor<T> {
+        let tmp = <RawTensor<T> as From<Vec<U>>>::from(value);
+        Tensor::from_raw(tmp)
+    }
+}
+
+impl<T, U, const N: usize> From<[U; N]> for Tensor<T>
+where
+    T: Numeric,
+    RawTensor<T>: From<U>,
+    U: Clone,
+{
+    fn from(value: [U; N]) -> Tensor<T> {
+        let raw_tensor = From::from(value.to_vec());
+        Tensor::from_raw(raw_tensor)
+    }
+}
+
+impl<T> From<T> for RawTensor<T>
+where
+    T: Numeric,
+{
+    fn from(value: T) -> Self {
+        RawTensor {
             array: vec![value],
             shape: vec![],
             ..Default::default()
@@ -115,13 +199,13 @@ where
     }
 }
 
-impl<T, U> From<Vec<U>> for Tensor<T>
+impl<T, U> From<Vec<U>> for RawTensor<T>
 where
     T: Numeric,
-    Tensor<T>: From<U>,
+    RawTensor<T>: From<U>,
 {
-    fn from(value: Vec<U>) -> Tensor<T> {
-        let tensors: Vec<_> = value.into_iter().map(Tensor::from).collect();
+    fn from(value: Vec<U>) -> RawTensor<T> {
+        let tensors: Vec<_> = value.into_iter().map(RawTensor::from).collect();
         let (arrays, shapes): (Vec<_>, Vec<_>) =
             tensors.into_iter().map(|t| (t.array, t.shape)).unzip();
         let valid = shapes.iter().all(|shape| *shape == shapes[0]);
@@ -131,7 +215,7 @@ where
         let mut shape = vec![shapes.len()];
         shape.extend_from_slice(&shapes[0]); // TODO: make this more by chaining iterators before so that we have shapes[0] is a dummy value
         let shape = shape;
-        Tensor {
+        RawTensor {
             array,
             shape,
             ..Default::default()
@@ -139,32 +223,23 @@ where
     }
 }
 
-impl<T, U, const N: usize> From<[U; N]> for Tensor<T>
+impl<T, U, const N: usize> From<[U; N]> for RawTensor<T>
 where
     T: Numeric,
-    Tensor<T>: From<U>,
+    RawTensor<T>: From<U>,
     U: Clone,
 {
-    fn from(value: [U; N]) -> Tensor<T> {
+    fn from(value: [U; N]) -> RawTensor<T> {
         From::from(value.to_vec())
     }
 }
 
-#[derive(Debug, PartialEq, Clone)]
-pub struct FrozenTensorView<'a, T>
-where
-    T: Numeric,
-{
-    tensor: &'a Tensor<T>,
-    shape: &'a Vec<usize>, // TODO: convert to let this be a slice
-}
-
-impl<T> Tensor<T>
+impl<T> RawTensor<T>
 where
     T: Numeric + Real,
 {
     fn abs(&self) -> Self {
-        let mut result = Tensor::new_empty(self.shape().clone());
+        let mut result = RawTensor::new_empty(self.shape().clone());
         for &elem in self.array.iter() {
             result.array.push(elem.abs())
         }
@@ -172,7 +247,7 @@ where
     }
 }
 
-impl<T> Tensor<T>
+impl<T> RawTensor<T>
 where
     T: Numeric,
 {
@@ -246,26 +321,26 @@ where
         Ok(global_idx)
     }
 
-    fn new_empty(shape: Vec<usize>) -> Tensor<T> {
+    fn new_empty(shape: Vec<usize>) -> RawTensor<T> {
         let mut total = 1;
         for &dim in shape.iter() {
             total *= dim;
         }
 
-        Tensor {
+        RawTensor {
             array: Vec::with_capacity(total),
             shape,
             ..Default::default()
         }
     }
-    pub fn new_with_filler(shape: Vec<usize>, filler: T) -> Tensor<T> {
+    pub fn new_with_filler(shape: Vec<usize>, filler: T) -> RawTensor<T> {
         assert!(!shape.is_empty());
         let mut total = 1;
         for &dim in shape.iter() {
             total *= dim;
         }
 
-        let mut tensor = Tensor {
+        let mut tensor = RawTensor {
             array: Vec::with_capacity(total),
             shape,
             ..Default::default()
@@ -276,36 +351,30 @@ where
         tensor
     }
 
-    pub fn scalar(scalar: T) -> Tensor<T> {
-        Tensor {
+    pub fn scalar(scalar: T) -> RawTensor<T> {
+        RawTensor {
             array: vec![scalar],
             shape: vec![1],
             ..Default::default()
         }
     }
-    pub fn new(array: Vec<T>, shape: Vec<usize>) -> Tensor<T> {
+    pub fn new(array: Vec<T>, shape: Vec<usize>) -> RawTensor<T> {
         let mut len = 1;
         for dim in shape.iter() {
             len *= dim;
         }
         assert_eq!(len, array.len());
-        Tensor {
+        RawTensor {
             array,
             shape,
             ..Default::default()
         }
     }
 
-    pub fn view(&self, shape: Vec<SliceRange>) -> TensorView<'_, T> {
-        TensorView::new(self, shape)
-    }
-
-    pub fn freeze(&self) -> FrozenTensorView<'_, T> {
-        FrozenTensorView {
-            tensor: self,
-            shape: &self.shape,
-        }
-    }
+    // pub fn view(&self, shape: Vec<SliceRange>) -> TensorView<T> {
+    //     let tensor = Tensor::from_raw(self);
+    //     TensorView::new(tensor, shape)
+    // }
 
     fn set(&mut self, index: &Vec<usize>, value: T) -> Result<(), String> {
         match self.get_global_index(index, None) {
@@ -344,7 +413,7 @@ where
     }
 }
 
-impl<T> Index<&Vec<usize>> for Tensor<T>
+impl<T> Index<&Vec<usize>> for RawTensor<T>
 where
     T: Numeric,
 {
@@ -355,12 +424,13 @@ where
     }
 }
 
-impl<T> TensorLike for Tensor<T>
+impl<T> TensorLike for RawTensor<T>
 where
     T: Numeric,
 {
     type Elem = T;
     type ShapeReturn<'a> = &'a Vec<usize> where Self : 'a ;
+    type TensorRef<'tensor> = &'tensor RawTensor<Self::Elem> where Self : 'tensor;
     fn shape(&self) -> Self::ShapeReturn<'_> {
         &self.shape
     }
@@ -371,25 +441,12 @@ where
             .fold(Self::Elem::zero(), |acc, x| acc + *x)
     }
 
-    fn tensor(&self) -> &Self {
+    fn tensor(&self) -> Self::TensorRef<'_> {
         self
     }
 
     fn to_tensor(&self) -> Self {
         self.clone()
-    }
-}
-
-impl<'a, T> FrozenTensorView<'a, T>
-where
-    T: Numeric,
-{
-    pub fn to_tensor(&self) -> Tensor<T> {
-        (*self.tensor).clone()
-    }
-
-    pub fn shape(&self) -> &Vec<usize> {
-        self.shape
     }
 }
 
@@ -399,6 +456,18 @@ where
     U: TensorLike<Elem = T>,
 {
     type Output = Tensor<T>;
+    fn add(self, right: &U) -> Self::Output {
+        let result = self.0.borrow().add(right);
+        Tensor::from_raw(result)
+    }
+}
+
+impl<T, U> Add<&U> for &RawTensor<T>
+where
+    T: Numeric,
+    U: TensorLike<Elem = T>,
+{
+    type Output = RawTensor<T>;
 
     /// ```
     /// # use rust_light::tensor::*;
@@ -412,7 +481,7 @@ where
     /// tensor.get(&vec![0,0,10, 0,1])
     /// );
     /// ```
-    fn add(self, right: &U) -> Tensor<T> {
+    fn add(self, right: &U) -> Self::Output {
         assert!(self.broadcastable(right.shape())); // TODO: figure out broadcasting
         let length = max(right.shape().len(), self.shape.len());
         let mut max_shape = Vec::with_capacity(length);
@@ -432,7 +501,7 @@ where
             max_shape.push(dim);
         }
         let index_iter = IndexIterator::new(max_shape.clone());
-        let mut result = Tensor::new_with_filler(max_shape.clone(), T::zero());
+        let mut result = RawTensor::new_with_filler(max_shape.clone(), T::zero());
         for idx in index_iter {
             let v = self[&idx] + *(*right).get(&idx).unwrap();
             if let Err(e) = result.set(&idx, v) {
@@ -443,6 +512,20 @@ where
     }
 }
 
+impl<T, U> Mul<&U> for &RawTensor<T>
+where
+    T: Numeric,
+    U: TensorLike<Elem = T>,
+{
+    type Output = RawTensor<T>;
+
+    fn mul(self, right: &U) -> RawTensor<T> {
+        if self.shape.len() == 1 {
+            return self.dot(right);
+        }
+        self.bmm(right)
+    }
+}
 impl<T, U> Mul<&U> for &Tensor<T>
 where
     T: Numeric,
@@ -450,10 +533,11 @@ where
 {
     type Output = Tensor<T>;
 
-    fn mul(self, right: &U) -> Tensor<T> {
-        if self.shape.len() == 1 {
-            return self.dot(right);
+    fn mul(self, right: &U) -> Self::Output {
+        if self.shape().len() == 1 {
+            let raw_tensor = self.dot(right);
+            return Tensor::from_raw(raw_tensor);
         }
-        self.bmm(right)
+        Tensor::from_raw(self.bmm(right))
     }
 }
