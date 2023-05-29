@@ -10,7 +10,7 @@ pub use tensor_view::*;
 pub use utils::*;
 
 use itertools::{EitherOrBoth::*, Itertools};
-use std::cell::{Ref, RefCell};
+
 use std::cmp::{max, PartialEq};
 use std::convert::From;
 use std::ops::{Add, Deref, Index, Mul};

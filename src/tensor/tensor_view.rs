@@ -1,8 +1,8 @@
 use super::numeric::*;
 use crate::tensor::{ElementIterator, RawTensor, RcTensor, SliceRange, TensorLike};
-use std::cell::Ref;
+
 use std::cmp::PartialEq;
-use std::ops::{Deref, Index};
+use std::ops::{Index};
 
 #[derive(Debug, Clone)]
 pub struct TensorView<T>
@@ -22,7 +22,7 @@ where
     type Output = T;
 
     fn index(&self, index: &Vec<usize>) -> &Self::Output {
-        &self.tensor.get_with_offset(index, &self.offset).unwrap()
+        self.tensor.get_with_offset(index, &self.offset).unwrap()
     }
 }
 

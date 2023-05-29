@@ -46,7 +46,7 @@ fn tanh_derivative<T: Numeric + Real>(tensor: RcTensor<T>) -> RcTensor<T> {
 
 #[test]
 fn test_tanh_derivative() {
-    let input = RcTensor::new((0..64).collect(), vec![4, 4, 4]);
+    let _input = RcTensor::new((0..64).collect(), vec![4, 4, 4]);
     // let epsilon = 1e-7 as f64;
     // let epsilon_tensor = Tensor::new_with_filler(epsilon, vec![4, 4, 4]);
     // let perturbed_input = &input + &epsilon_tensor;
