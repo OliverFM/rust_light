@@ -13,7 +13,7 @@ use itertools::{EitherOrBoth::*, Itertools};
 
 use std::cmp::{max, PartialEq};
 use std::convert::From;
-use std::ops::{Add, Deref, Index, Mul};
+use std::ops::{Add, Deref, Index, Mul, Neg, Sub};
 use std::rc::Rc;
 
 #[derive(Debug, PartialEq, Clone)]
@@ -260,7 +260,7 @@ impl<T> RawTensor<T>
 where
     T: Numeric + Real,
 {
-    fn abs(&self) -> Self {
+    pub fn abs(&self) -> Self {
         let mut result = RawTensor::new_empty(self.shape().clone());
         for &elem in self.array.iter() {
             result.array.push(elem.abs())
@@ -376,7 +376,7 @@ where
     pub fn scalar(scalar: T) -> RawTensor<T> {
         RawTensor {
             array: vec![scalar],
-            shape: vec![1],
+            shape: vec![],
             ..Default::default()
         }
     }
@@ -446,6 +446,30 @@ where
     }
 }
 
+impl<T> Neg for &RcTensor<T>
+where
+    T: Numeric + Neg<Output = T>,
+{
+    type Output = RcTensor<T>;
+    fn neg(self) -> Self::Output {
+        RcTensor::from_raw(self.0.neg())
+    }
+}
+
+impl<T> Neg for &RawTensor<T>
+where
+    T: Numeric + Neg<Output = T>,
+{
+    type Output = RawTensor<T>;
+    fn neg(self) -> Self::Output {
+        let mut result = RawTensor::new_empty(self.shape.clone());
+        for &v in self.array.iter() {
+            result.array.push(-v);
+        }
+        result
+    }
+}
+
 impl<T> TensorLike for RawTensor<T>
 where
     T: Numeric,
@@ -494,6 +518,33 @@ where
     fn add(self, right: &U) -> Self::Output {
         let result = self.deref().add(right);
         RcTensor::from_raw(result)
+    }
+}
+
+impl<T, U, V> Sub<&U> for &RcTensor<T>
+where
+    T: Numeric + Neg,
+    U: TensorLike<Elem = T>,
+    for<'a> &'a U: Neg<Output = V>,
+    V: TensorLike<Elem = T>,
+{
+    type Output = RcTensor<T>;
+    fn sub(self, right: &U) -> Self::Output {
+        RcTensor::from_raw(self.0.sub(right))
+    }
+}
+
+impl<T, U, V> Sub<&U> for &RawTensor<T>
+where
+    T: Numeric + Neg,
+    U: TensorLike<Elem = T>,
+    for<'a> &'a U: Neg<Output = V>,
+    V: TensorLike<Elem = T>,
+{
+    type Output = RawTensor<T>;
+    fn sub(self, right: &U) -> Self::Output {
+        let negative = right.neg();
+        self.add(&negative)
     }
 }
 
@@ -555,12 +606,19 @@ where
     type Output = RawTensor<T>;
 
     fn mul(self, right: &U) -> RawTensor<T> {
+        if self.shape().len() == 0 {
+            return right.left_scalar_multiplication(&self.array[0]);
+        }
+        if right.shape().len() == 0 {
+            return right.right_scalar_multiplication(&self.array[0]);
+        }
         if self.shape.len() == 1 {
             return self.dot(right);
         }
         self.bmm_raw(right)
     }
 }
+
 impl<T, U> Mul<&U> for &RcTensor<T>
 where
     T: Numeric,
@@ -569,6 +627,14 @@ where
     type Output = RcTensor<T>;
 
     fn mul(self, right: &U) -> Self::Output {
+        if self.shape().len() == 0 {
+            let raw_tensor = right.left_scalar_multiplication(&self.0.array[0]);
+            return RcTensor::from_raw(raw_tensor);
+        }
+        if right.shape().len() == 0 {
+            let raw_tensor = right.right_scalar_multiplication(&self.0.array[0]);
+            return RcTensor::from_raw(raw_tensor);
+        }
         if self.shape().len() == 1 {
             let raw_tensor = self.dot(right);
             return RcTensor::from_raw(raw_tensor);
@@ -576,3 +642,21 @@ where
         self.bmm(right)
     }
 }
+
+// trait Private: TensorLike {}
+// impl<T: Numeric> Private for RawTensor<T> {}
+//
+// impl<T, U: Private> Mul<&T> for U
+// where
+//     U: TensorLike<Elem = T> + Private,
+//     T: Numeric + Send,
+// {
+//     type Output = RawTensor<T>;
+//
+//     fn mul(self, right: &U) -> RawTensor<T> {
+//         if self.shape.len() == 1 {
+//             return self.dot(right);
+//         }
+//         self.bmm_raw(right)
+//     }
+// }
