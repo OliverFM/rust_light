@@ -3,6 +3,15 @@ use super::utils::IndexIterator;
 use crate::tensor::{RawTensor, RcTensor, SliceRange, TensorView};
 use std::ops::Deref;
 
+pub trait TensorLikePublic: TensorLike {}
+
+impl<T, U> TensorLikePublic for U
+where
+    T: Numeric,
+    U: TensorLike<Elem = T>,
+{
+}
+
 pub trait TensorLike {
     type Elem: Numeric;
     type ShapeReturn<'a>: Deref<Target = Vec<usize>>
@@ -16,6 +25,11 @@ pub trait TensorLike {
         Self: 'a;
 
     fn get(&self, index: &Vec<usize>) -> Result<&Self::Elem, String>;
+
+    fn get_first_elem(&self) -> &Self::Elem {
+        let shape = vec![0; self.shape().deref().len()];
+        self.get(&shape).unwrap()
+    }
 
     fn shape(&self) -> Self::ShapeReturn<'_>;
 
@@ -46,6 +60,7 @@ pub trait TensorLike {
         result
     }
 
+    // TODO: split this by return type in the same way as bmm
     fn dot<U>(&self, other: &U) -> RawTensor<Self::Elem>
     where
         U: TensorLike<Elem = Self::Elem>,
@@ -83,6 +98,8 @@ pub trait TensorLike {
     where
         U: TensorLike<Elem = Self::Elem>;
 
+    // TODO: consider making this private with type magic
+    // https://jack.wrenn.fyi/blog/private-trait-methods/
     #[inline]
     fn bmm_rc<U>(&self, right: &U) -> RcTensor<Self::Elem>
     where

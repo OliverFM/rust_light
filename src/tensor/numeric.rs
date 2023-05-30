@@ -1,7 +1,7 @@
 pub use num::{One, Zero};
 use std::cmp::PartialEq;
 
-pub use std::ops::{Add, Mul};
+pub use std::ops::{Add, Mul, Neg};
 
 pub trait Numeric: Zero + One + Copy + Clone + Mul + Add + PartialEq + std::fmt::Debug {}
 // https://stackoverflow.com/questions/42381185/specifying-generic-parameter-to-belong-to-a-small-set-of-types
