@@ -13,6 +13,7 @@ pub use utils::*;
 
 use itertools::{EitherOrBoth::*, Itertools};
 
+use std::cell::RefCell;
 use std::cmp::{max, PartialEq};
 use std::convert::From;
 use std::ops::{Add, Deref, Index, Mul, Neg, Sub};
@@ -112,6 +113,20 @@ impl<T: Numeric> RcTensor<T> {
     }
 }
 
+impl<T: Numeric> HasGrad for RawTensor<T> {
+    type GradType = RcTensor<T>;
+    fn set_grad(&mut self, grad: Self::GradType) {
+        *self.grad.borrow_mut() = Some(grad);
+    }
+}
+
+impl<T: Numeric> HasGrad for RcTensor<T> {
+    type GradType = RcTensor<T>;
+    fn set_grad(&mut self, grad: Self::GradType) {
+        *self.0.grad.borrow_mut() = Some(grad);
+    }
+}
+
 impl<T> TensorLike for RcTensor<T>
 where
     T: Numeric,
@@ -129,7 +144,7 @@ where
         self.deref().get(index)
     }
     fn sum(&self) -> Self::Elem {
-        todo!()
+        self.0.sum()
     }
 
     fn tensor(&self) -> Self::TensorRef<'_> {
@@ -164,7 +179,7 @@ where
     // TODO: consider using const generics to switch to type: Box<[T; N]>
     array: Vec<T>, // later on, I will need unsafe code to replace this with a statically sized type
     shape: Vec<usize>, // TODO: convert to let this be a slice
-    grad: Option<RcTensor<T>>, // TODO: think about the best representation here
+    grad: RefCell<Option<RcTensor<T>>>, // TODO: think about the best representation here
     derivative: Option<Derivative<T>>,
 }
 
@@ -188,7 +203,7 @@ where
     fn default() -> Self {
         RawTensor {
             shape: vec![],
-            grad: None,
+            grad: RefCell::new(None),
             array: vec![],
             derivative: None,
         }
@@ -653,6 +668,7 @@ where
             return RcTensor::from_raw(raw_tensor);
         }
         if right.shape().len() == 0 {
+            panic!("This is buggy");
             let raw_tensor = right.right_scalar_multiplication(&self.0.array[0]);
             return RcTensor::from_raw(raw_tensor);
         }

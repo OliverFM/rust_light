@@ -12,7 +12,14 @@ where
 {
 }
 
-pub trait TensorLike {
+pub trait HasGrad {
+    type GradType: TensorLike;
+    fn set_grad(&mut self, grad: Self::GradType) {
+        todo!();
+    }
+}
+
+pub trait TensorLike: HasGrad {
     type Elem: Numeric;
     type ShapeReturn<'a>: Deref<Target = Vec<usize>>
     where

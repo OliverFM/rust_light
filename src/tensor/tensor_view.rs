@@ -1,5 +1,5 @@
 use super::numeric::*;
-use crate::tensor::{ElementIterator, RawTensor, RcTensor, SliceRange, TensorLike};
+use crate::tensor::{ElementIterator, HasGrad, RawTensor, RcTensor, SliceRange, TensorLike};
 
 use std::cmp::PartialEq;
 use std::ops::Index;
@@ -50,6 +50,10 @@ where
     //     // self.tensor.clone()
     //     todo!()
     // }
+}
+
+impl<T: Numeric> HasGrad for TensorView<T> {
+    type GradType = RcTensor<T>;
 }
 
 impl<T> TensorLike for TensorView<T>

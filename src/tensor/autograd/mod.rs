@@ -49,11 +49,42 @@ fn tanh_derivative<T: Numeric + Real>(tensor: &RcTensor<T>) -> RcTensor<T> {
     let mut array = Vec::with_capacity(length);
     for elem in ElementIterator::new(tensor) {
         let v = T::one() - elem.tanh().powi(2);
-        println!("tanh^-1({elem:?})={v:?}");
+        // println!("tanh^-1({elem:?})={v:?}");
         array.push(v);
     }
     // RcTensor::new(array, tensor.shape().clone())
     RcTensor::new(array, tensor.shape().clone())
+}
+
+#[test]
+fn test_tanh_twice() {
+    let input = RcTensor::from([[2.0, 3.2, 3.4], [0.0, 1.0, 2.0]]);
+    let epsilon = 1e-12 as f64;
+    let output = tanh(&tanh(&input));
+    let output_perturbed = tanh(&tanh(&(&input + &RcTensor::scalar(epsilon))));
+    println!(
+        "output_perturbed=
+    {output_perturbed:?}"
+    );
+    println!(
+        "output=
+    {output:?}"
+    );
+    println!("____={:?}", RcTensor::scalar(epsilon));
+    let numerical_derivative = &RcTensor::scalar(1.0 / epsilon) * &(&output_perturbed - &output);
+    let grad = output.derivative.clone().unwrap().compute();
+    let abs_diff = (&numerical_derivative - &grad).abs();
+    println!(
+        "numerical_derivative=
+    {numerical_derivative:?}"
+    );
+
+    println!(
+        "grad=
+        {grad:?}"
+    );
+    println!("abs_diff.sum()={}", abs_diff.sum());
+    assert!(abs_diff.sum() / 6.0 <= 1e-5);
 }
 
 #[test]
