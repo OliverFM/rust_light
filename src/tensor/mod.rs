@@ -646,12 +646,13 @@ where
             return right.left_scalar_multiplication(&self.array[0]);
         }
         if right.shape().len() == 0 {
-            return right.right_scalar_multiplication(&self.array[0]);
+            return self.right_scalar_multiplication(&right.get_first_elem());
         }
         if self.shape.len() == 1 {
             return self.dot(right);
         }
-        self.bmm_raw(right)
+        unimplemented!("need to get element wise multiplication working!")
+        // self.bmm_raw(right)
     }
 }
 
@@ -663,20 +664,8 @@ where
     type Output = RcTensor<T>;
 
     fn mul(self, right: &U) -> Self::Output {
-        if self.shape().is_empty() {
-            let raw_tensor = right.left_scalar_multiplication(&self.0.array[0]);
-            return RcTensor::from_raw(raw_tensor);
-        }
-        if right.shape().len() == 0 {
-            panic!("This is buggy");
-            let raw_tensor = right.right_scalar_multiplication(&self.0.array[0]);
-            return RcTensor::from_raw(raw_tensor);
-        }
-        if self.shape().len() == 1 {
-            let raw_tensor = self.dot(right);
-            return RcTensor::from_raw(raw_tensor);
-        }
-        self.bmm(right)
+        let raw_tensor = self.0.deref().mul(right);
+        return RcTensor::from_raw(raw_tensor);
     }
 }
 
