@@ -1,8 +1,10 @@
+mod autograd;
 mod numeric;
 mod tensor_like;
 mod tensor_view;
 mod utils;
 
+pub use autograd::Derivative;
 use num::traits::real::Real;
 pub use numeric::*;
 pub use tensor_like::*;
@@ -55,6 +57,12 @@ where
 impl<T: Numeric> RcTensor<T> {
     fn from_raw(raw_tensor: RawTensor<T>) -> RcTensor<T> {
         RcTensor(Rc::new(raw_tensor))
+    }
+
+    pub fn backward(&self) -> Self {
+        // TODO: don't just unwrap, switch to a Result type and deal with the case of no gradient
+        // appropriately
+        return self.derivative.clone().unwrap().compute();
     }
 
     fn new_empty(shape: Vec<usize>) -> RcTensor<T> {
@@ -128,8 +136,8 @@ where
         self.clone()
     }
 
-    fn to_tensor(&self) -> RawTensor<Self::Elem> {
-        todo!()
+    fn to_tensor(&self) -> RcTensor<Self::Elem> {
+        self.clone()
     }
 
     fn slice(&self, offset: Vec<SliceRange>) -> TensorView<T> {
@@ -148,7 +156,7 @@ where
 // fn test_user_tensor_multiplication() {}
 //
 /// The core `struct` in this library.
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Debug, Clone)]
 pub struct RawTensor<T>
 where
     T: Numeric,
@@ -156,9 +164,21 @@ where
     // TODO: consider using const generics to switch to type: Box<[T; N]>
     array: Vec<T>, // later on, I will need unsafe code to replace this with a statically sized type
     shape: Vec<usize>, // TODO: convert to let this be a slice
-    grad: Vec<T>,
-    requires_grad: bool,
-    parents: Vec<RcTensor<T>>,
+    grad: Option<RcTensor<T>>, // TODO: think about the best representation here
+    derivative: Option<Derivative<T>>,
+}
+
+impl<T: Numeric> PartialEq for RawTensor<T> {
+    // TODO: Think if this should change
+    fn eq(&self, other: &Self) -> bool {
+        if self.shape != other.shape {
+            return false;
+        }
+        if self.array != other.array {
+            return false;
+        }
+        true
+    }
 }
 
 impl<T> Default for RawTensor<T>
@@ -167,11 +187,10 @@ where
 {
     fn default() -> Self {
         RawTensor {
-            requires_grad: false,
             shape: vec![],
-            grad: vec![],
+            grad: None,
             array: vec![],
-            parents: vec![],
+            derivative: None,
         }
     }
 }
@@ -492,8 +511,8 @@ where
         self
     }
 
-    fn to_tensor(&self) -> Self {
-        self.clone()
+    fn to_tensor(&self) -> RcTensor<Self::Elem> {
+        RcTensor::from_raw(self.clone())
     }
     fn slice(&self, offset: Vec<SliceRange>) -> TensorView<T> {
         TensorView::new(RcTensor::from_raw(self.clone()), offset)
@@ -516,8 +535,10 @@ where
 {
     type Output = RcTensor<T>;
     fn add(self, right: &U) -> Self::Output {
-        let result = self.deref().add(right);
-        RcTensor::from_raw(result)
+        let mut raw_tensor = self.deref().add(right);
+        // TODO: set derivative struct for right too
+        raw_tensor.derivative = Some(Derivative::new(vec![self.to_tensor()], autograd::ones));
+        RcTensor::from_raw(raw_tensor)
     }
 }
 
@@ -606,7 +627,7 @@ where
     type Output = RawTensor<T>;
 
     fn mul(self, right: &U) -> RawTensor<T> {
-        if self.shape().len() == 0 {
+        if self.shape().is_empty() {
             return right.left_scalar_multiplication(&self.array[0]);
         }
         if right.shape().len() == 0 {
@@ -627,7 +648,7 @@ where
     type Output = RcTensor<T>;
 
     fn mul(self, right: &U) -> Self::Output {
-        if self.shape().len() == 0 {
+        if self.shape().is_empty() {
             let raw_tensor = right.left_scalar_multiplication(&self.0.array[0]);
             return RcTensor::from_raw(raw_tensor);
         }

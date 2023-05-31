@@ -1,37 +1,47 @@
-use super::tensor::{ElementIterator, Numeric, RcTensor, TensorLike, TensorLikePublic};
+use super::numeric::*;
+use crate::tensor::{ElementIterator, RawTensor, RcTensor, SliceRange, TensorLike};
 use num::traits::real::Real;
 
-pub struct LinearLayer<T>
-where
-    T: Numeric,
-{
-    weights: RcTensor<T>,
-    bias: RcTensor<T>,
+#[derive(Debug, PartialEq, Clone)]
+pub struct Derivative<T: Numeric> {
+    inputs: Vec<RcTensor<T>>,
+    // TODO: remove the need to take ownership here
+    derivative: fn(Vec<RcTensor<T>>) -> RcTensor<T>,
 }
 
-impl<T> LinearLayer<T>
-where
-    T: Numeric,
-{
-    pub fn forward<U>(&self, batch: &U) -> RcTensor<T>
-    where
-        U: TensorLikePublic<Elem = T>,
-    {
-        let y = &self.weights * batch;
-        println!("y.shape()={:?}", y.shape());
-        println!("bias.shape()={:?}", self.bias.shape());
+impl<T: Numeric> Derivative<T> {
+    pub fn new(
+        inputs: Vec<RcTensor<T>>,
+        derivative: fn(Vec<RcTensor<T>>) -> RcTensor<T>,
+    ) -> Derivative<T> {
+        Derivative { inputs, derivative }
+    }
 
-        &y + &self.bias
+    pub fn compute(&self) -> RcTensor<T> {
+        // TODO: add chain rule in
+        (self.derivative)(self.inputs.clone())
     }
 }
 
-fn tanh<T: Numeric + Real>(tensor: &RcTensor<T>) -> RcTensor<T> {
+pub fn ones<T: Numeric>(tensors: Vec<RcTensor<T>>) -> RcTensor<T> {
+    assert!(tensors.len() == 1);
+    let raw_tensor = RawTensor::new_with_filler(tensors[0].shape().to_vec(), T::one());
+    RcTensor::from_raw(raw_tensor)
+}
+
+pub fn tanh<T: Numeric + Real>(tensor: &RcTensor<T>) -> RcTensor<T> {
     let length = tensor.shape().iter().fold(1, |acc, x| acc * *x);
     let mut array = Vec::with_capacity(length);
     for elem in ElementIterator::new(tensor) {
         array.push(elem.tanh());
     }
-    RcTensor::new(array, tensor.shape().clone())
+    let mut raw_tensor = RawTensor::new(array, tensor.shape().clone());
+    raw_tensor.derivative = Some(Derivative::new(vec![tensor.clone()], tanh_derivative_outer));
+    RcTensor::from_raw(raw_tensor)
+}
+
+fn tanh_derivative_outer<T: Numeric + Real>(tensors: Vec<RcTensor<T>>) -> RcTensor<T> {
+    tanh_derivative(&tensors[0])
 }
 
 fn tanh_derivative<T: Numeric + Real>(tensor: &RcTensor<T>) -> RcTensor<T> {
@@ -42,6 +52,7 @@ fn tanh_derivative<T: Numeric + Real>(tensor: &RcTensor<T>) -> RcTensor<T> {
         println!("tanh^-1({elem:?})={v:?}");
         array.push(v);
     }
+    // RcTensor::new(array, tensor.shape().clone())
     RcTensor::new(array, tensor.shape().clone())
 }
 
@@ -89,17 +100,8 @@ fn test_tanh_derivative() {
     let abs_diff = (&numerical_derivative - &calculated_derivative).abs();
     println!("abs_diff.sum()={}", abs_diff.sum());
     assert!(abs_diff.sum() / 64.0 <= 1e-5);
-}
-
-#[test]
-fn test_layer() {
-    let layer = LinearLayer {
-        weights: RcTensor::new_with_filler(vec![1, 2, 2], 1),
-        bias: RcTensor::new_with_filler(vec![1, 2, 1], 1),
-    };
-    let input = RcTensor::new(vec![1, 2], vec![2, 1]);
-    let res = layer.forward(&input);
-    let expected = RcTensor::new(vec![4, 4], vec![1, 2, 1]);
-
-    assert_eq!(res, expected);
+    let grad = output.derivative.clone().unwrap().compute();
+    let abs_diff2 = (&calculated_derivative - &grad).abs();
+    println!("abs_diff2.sum()={}", abs_diff2.sum());
+    assert!(abs_diff2.sum() / 64.0 <= 1e-15);
 }

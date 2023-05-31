@@ -2,7 +2,7 @@ use super::numeric::*;
 use crate::tensor::{ElementIterator, RawTensor, RcTensor, SliceRange, TensorLike};
 
 use std::cmp::PartialEq;
-use std::ops::{Index};
+use std::ops::Index;
 
 #[derive(Debug, Clone)]
 pub struct TensorView<T>
@@ -46,10 +46,10 @@ where
             shape, // TODO: fix this
         }
     }
-    pub fn to_tensor(&self) -> RawTensor<T> {
-        // self.tensor.clone()
-        todo!()
-    }
+    // pub fn to_tensor(&self) -> RcTensor<T> {
+    //     // self.tensor.clone()
+    //     todo!()
+    // }
 }
 
 impl<T> TensorLike for TensorView<T>
@@ -69,7 +69,7 @@ where
         self.tensor.clone()
     }
 
-    fn to_tensor(&self) -> RawTensor<T> {
+    fn to_tensor(&self) -> RcTensor<T> {
         todo!();
         // let mut tensor = Tensor::new_empty(self.shape);
     }
@@ -99,7 +99,7 @@ where
     }
 }
 
-impl<'a, T, V> PartialEq<V> for TensorView<T>
+impl<T, V> PartialEq<V> for TensorView<T>
 where
     T: Numeric,
     V: TensorLike<Elem = T>,

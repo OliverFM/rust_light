@@ -40,7 +40,7 @@ pub trait TensorLike {
 
     /// Convert this self into a new Tensor -- is self is already a Tensor this is a clone.
     /// for a `TensorView`, for example, the new Tensor is the same shape as the view.
-    fn to_tensor(&self) -> RawTensor<Self::Elem>;
+    fn to_tensor(&self) -> RcTensor<Self::Elem>;
 
     fn slice(&self, offset: Vec<SliceRange>) -> TensorView<Self::Elem>;
 
