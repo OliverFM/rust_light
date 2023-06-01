@@ -70,11 +70,7 @@ impl<T: Numeric> RcTensor<T> {
     pub fn compute_grad(&self) -> Option<Self> {
         // TODO: don't just unwrap, switch to a Result type and deal with the case of no gradient
         // appropriately
-        if let Some(derivative) = &self.derivative {
-            Some(derivative.compute())
-        } else {
-            None
-        }
+        self.derivative.as_ref().map(|derivative| derivative.compute())
     }
 
     fn new_empty(shape: Vec<usize>) -> RcTensor<T> {
@@ -683,7 +679,7 @@ fn element_wise_multiplication<T: Numeric>(
 ) -> RawTensor<T> {
     let left_shape_vec = left.shape().to_vec();
     assert!(left_shape_vec == right.shape().to_vec());
-    let length = left.shape().iter().fold(1, |acc, x| acc * x);
+    let length = left.shape().iter().product();
     let mut array = Vec::with_capacity(length);
     for (&x, &y) in ElementIterator::new(left).zip(ElementIterator::new(right)) {
         array.push(x * y);
@@ -708,7 +704,7 @@ where
             return right.left_scalar_multiplication(&self.array[0]);
         }
         if right.shape().len() == 0 {
-            return self.right_scalar_multiplication(&right.get_first_elem());
+            return self.right_scalar_multiplication(right.get_first_elem());
         }
         element_wise_multiplication(self, right)
     }
@@ -723,7 +719,7 @@ where
 
     fn mul(self, right: &U) -> Self::Output {
         let raw_tensor = self.0.deref().mul(right);
-        return RcTensor::from_raw(raw_tensor);
+        RcTensor::from_raw(raw_tensor)
     }
 }
 

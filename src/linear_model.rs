@@ -1,4 +1,4 @@
-use super::tensor::{ElementIterator, Numeric, RcTensor, TensorLike, TensorLikePublic};
+use super::tensor::{Numeric, RcTensor, TensorLike, TensorLikePublic};
 
 pub struct LinearLayer<T>
 where

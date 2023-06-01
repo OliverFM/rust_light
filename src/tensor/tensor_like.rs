@@ -1,6 +1,6 @@
 use super::numeric::*;
 use super::utils::IndexIterator;
-use crate::tensor::{RawTensor, RcTensor, Scalar, SliceRange, TensorView};
+use crate::tensor::{RawTensor, RcTensor, SliceRange, TensorView};
 use std::ops::Deref;
 
 pub trait TensorLikePublic: TensorLike {}
@@ -14,7 +14,7 @@ where
 
 pub trait HasGrad {
     type GradType: TensorLike;
-    fn set_grad(&self, grad: Self::GradType) {
+    fn set_grad(&self, _grad: Self::GradType) {
         todo!();
     }
 }

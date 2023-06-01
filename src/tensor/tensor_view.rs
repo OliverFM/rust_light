@@ -1,6 +1,6 @@
 use super::numeric::*;
 use crate::tensor::{
-    ElementIterator, HasGrad, RawTensor, RcTensor, Scalar, SliceRange, TensorLike,
+    ElementIterator, HasGrad, RcTensor, Scalar, SliceRange, TensorLike,
 };
 
 use std::cmp::PartialEq;
