@@ -1,7 +1,7 @@
 use itertools::{EitherOrBoth::*, Itertools};
 use num::traits::real::Real;
 
-use std::cell::{RefCell};
+use std::cell::RefCell;
 use std::cmp::{max, PartialEq};
 use std::convert::From;
 use std::ops::{Add, Deref, Index, Mul, Neg, Sub};
@@ -679,33 +679,38 @@ where
     }
 }
 
-fn element_wise_multiplication<T: Numeric>(
-    left: &impl TensorLike<Elem = T>,
-    right: &impl TensorLike<Elem = T>,
-) -> RawTensor<T> {
+fn element_wise_multiplication<T, U1, V1, U2, V2>(left: U1, right: U2) -> RawTensor<T>
+where
+    T: Numeric,
+    U1: Deref<Target = V1> + std::fmt::Debug + Clone,
+    V1: TensorLike<Elem = T>,
+    U2: Deref<Target = V2> + Clone + std::fmt::Debug,
+    V2: TensorLike<Elem = T>,
+{
     let left_shape_vec = left.shape().to_vec();
     assert!(left_shape_vec == right.shape().to_vec());
     let length = left.shape().iter().product();
     let mut array = Vec::with_capacity(length);
-    for (&x, &y) in ElementIterator::new(left).zip(ElementIterator::new(right)) {
+    dbg!("left={}, right={},", left.clone(), right.clone());
+    for (x, y) in ElementIterator::new(left).zip(ElementIterator::new(right)) {
         array.push(x * y);
     }
 
-    dbg!("left={}, right={},", &left, &right);
     dbg!("array={}, shape={},", &array, &left_shape_vec,);
     let result = RawTensor::new(array, left_shape_vec);
     dbg!("result={:?}", &result);
     result
 }
 
-impl<T, U> Mul<&U> for &RawTensor<T>
+impl<T, U, V> Mul<U> for &RawTensor<T>
 where
     T: Numeric,
-    U: TensorLike<Elem = T>,
+    U: Deref<Target = V> + Clone + std::fmt::Debug,
+    V: TensorLike<Elem = T>,
 {
     type Output = RawTensor<T>;
 
-    fn mul(self, right: &U) -> RawTensor<T> {
+    fn mul(self, right: U) -> RawTensor<T> {
         if self.shape().is_empty() {
             return right.left_scalar_multiplication(&self.array[0]);
         }
