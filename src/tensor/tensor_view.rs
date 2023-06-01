@@ -1,5 +1,7 @@
 use super::numeric::*;
-use crate::tensor::{ElementIterator, HasGrad, RawTensor, RcTensor, SliceRange, TensorLike};
+use crate::tensor::{
+    ElementIterator, HasGrad, RawTensor, RcTensor, Scalar, SliceRange, TensorLike,
+};
 
 use std::cmp::PartialEq;
 use std::ops::Index;
@@ -64,6 +66,7 @@ where
     type ShapeReturn<'a> = &'a Vec<usize> where Self: 'a ;
     type TensorRef<'a>= RcTensor<T> where Self: 'a; // &'tensor Tensor<Self::Elem> where Self : 'tensor;
     type ResultTensorType<'a>= RcTensor<T> where Self: 'a; // &'tensor Tensor<Self::Elem> where Self : 'tensor;
+    type SumType = Scalar<Self::Elem>;
     fn shape(&self) -> Self::ShapeReturn<'_> {
         &self.shape
     }
@@ -78,10 +81,11 @@ where
         // let mut tensor = Tensor::new_empty(self.shape);
     }
 
-    fn sum(&self) -> Self::Elem {
+    fn sum(&self) -> Scalar<Self::Elem> {
         let iter = ElementIterator::new(self);
 
-        iter.fold(Self::Elem::zero(), |acc, x| acc + *x)
+        let v = iter.fold(Self::Elem::zero(), |acc, x| acc + *x);
+        Scalar::from(v)
     }
 
     fn get(&self, index: &Vec<usize>) -> Result<&T, String> {
@@ -134,5 +138,5 @@ fn test_sum_tensor_view() {
         SliceRange::new(2, 4),
     ]);
 
-    assert_eq!(view.sum(), 2 * (4 + 5));
+    assert_eq!(view.sum().elem(), 2 * (4 + 5));
 }

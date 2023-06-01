@@ -9,7 +9,9 @@ pub struct Derivative<T: Numeric> {
     derivative: fn(Vec<RcTensor<T>>) -> RcTensor<T>,
 }
 
-impl<T: Numeric> Derivative<T> {
+impl<T: Numeric> Derivative<T>
+// where RcTensor<T>: Mul<Output = RcTensor<T>>
+{
     pub fn new(
         inputs: Vec<RcTensor<T>>,
         derivative: fn(Vec<RcTensor<T>>) -> RcTensor<T>,
@@ -19,7 +21,13 @@ impl<T: Numeric> Derivative<T> {
 
     pub fn compute(&self) -> RcTensor<T> {
         // TODO: add chain rule in
-        (self.derivative)(self.inputs.clone())
+        assert!(self.inputs.len() <= 1);
+        if let Some(grad) = self.inputs[0].compute_grad() {
+            &(self.derivative)(self.inputs.clone()) * &grad
+            // (self.derivative)(self.inputs.clone())
+        } else {
+            (self.derivative)(self.inputs.clone())
+        }
     }
 }
 
@@ -58,10 +66,10 @@ fn tanh_derivative<T: Numeric + Real>(tensor: &RcTensor<T>) -> RcTensor<T> {
 
 #[test]
 fn test_tanh_twice() {
-    let input = RcTensor::from([[2.0, 3.2, 3.4], [0.0, 1.0, 2.0]]);
+    let input = RcTensor::from([0.666]);
     let epsilon = 1e-12 as f64;
-    let output = tanh(&tanh(&input));
-    let output_perturbed = tanh(&tanh(&(&input + &RcTensor::scalar(epsilon))));
+    let output = tanh(&tanh(&input)).sum();
+    let output_perturbed = tanh(&tanh(&(&input + &RcTensor::scalar(epsilon)))).sum();
     println!(
         "output_perturbed=
     {output_perturbed:?}"
@@ -70,21 +78,21 @@ fn test_tanh_twice() {
         "output=
     {output:?}"
     );
-    println!("____={:?}", RcTensor::scalar(epsilon));
+    println!("____={:?}\n\n", RcTensor::scalar(epsilon));
     let numerical_derivative = &RcTensor::scalar(1.0 / epsilon) * &(&output_perturbed - &output);
     let grad = output.derivative.clone().unwrap().compute();
     let abs_diff = (&numerical_derivative - &grad).abs();
     println!(
         "numerical_derivative=
-    {numerical_derivative:?}"
+    {numerical_derivative:?}\n\n"
     );
 
     println!(
         "grad=
-        {grad:?}"
+        {grad:?}\n\n"
     );
-    println!("abs_diff.sum()={}", abs_diff.sum());
-    assert!(abs_diff.sum() / 6.0 <= 1e-5);
+    println!("abs_diff.sum()={:?}", abs_diff.sum());
+    assert!(abs_diff.sum().elem() <= 1e-5);
 }
 
 #[test]
@@ -129,10 +137,10 @@ fn test_tanh_derivative() {
         {calculated_derivative:?}"
     );
     let abs_diff = (&numerical_derivative - &calculated_derivative).abs();
-    println!("abs_diff.sum()={}", abs_diff.sum());
-    assert!(abs_diff.sum() / 64.0 <= 1e-5);
+    println!("abs_diff.sum()={:?}", abs_diff.sum());
+    assert!(abs_diff.sum().elem() / 64.0 <= 1e-5);
     let grad = output.derivative.clone().unwrap().compute();
     let abs_diff2 = (&calculated_derivative - &grad).abs();
-    println!("abs_diff2.sum()={}", abs_diff2.sum());
-    assert!(abs_diff2.sum() / 64.0 <= 1e-15);
+    println!("abs_diff2.sum()={:?}", abs_diff2.sum());
+    assert!(abs_diff2.sum().elem() / 64.0 <= 1e-15);
 }

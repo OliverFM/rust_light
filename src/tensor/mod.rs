@@ -44,6 +44,9 @@ impl SliceRange {
 #[derive(Debug, PartialEq, Clone)]
 pub struct RcTensor<T: Numeric>(Rc<RawTensor<T>>);
 
+// TODO: make this a separate struct
+type Scalar<T> = RcTensor<T>;
+
 impl<T> Deref for RcTensor<T>
 where
     T: Numeric,
@@ -56,14 +59,22 @@ where
 }
 
 impl<T: Numeric> RcTensor<T> {
+    pub fn is_scalar(&self) -> bool {
+        self.0.array.len() == 1 && self.0.shape.is_empty()
+    }
+
     fn from_raw(raw_tensor: RawTensor<T>) -> RcTensor<T> {
         RcTensor(Rc::new(raw_tensor))
     }
 
-    pub fn backward(&self) -> Self {
+    pub fn compute_grad(&self) -> Option<Self> {
         // TODO: don't just unwrap, switch to a Result type and deal with the case of no gradient
         // appropriately
-        return self.derivative.clone().unwrap().compute();
+        if let Some(derivative) = &self.derivative {
+            Some(derivative.compute())
+        } else {
+            None
+        }
     }
 
     fn new_empty(shape: Vec<usize>) -> RcTensor<T> {
@@ -115,16 +126,21 @@ impl<T: Numeric> RcTensor<T> {
 
 impl<T: Numeric> HasGrad for RawTensor<T> {
     type GradType = RcTensor<T>;
-    fn set_grad(&mut self, grad: Self::GradType) {
+    fn set_grad(&self, grad: Self::GradType) {
         *self.grad.borrow_mut() = Some(grad);
     }
 }
 
 impl<T: Numeric> HasGrad for RcTensor<T> {
     type GradType = RcTensor<T>;
-    fn set_grad(&mut self, grad: Self::GradType) {
+    fn set_grad(&self, grad: Self::GradType) {
         *self.0.grad.borrow_mut() = Some(grad);
     }
+}
+
+fn ones<T: Numeric>(tensors: Vec<RcTensor<T>>) -> RcTensor<T> {
+    assert_eq!(tensors.len(), 1);
+    RcTensor::new_with_filler(tensors[0].shape().to_vec(), T::one())
 }
 
 impl<T> TensorLike for RcTensor<T>
@@ -135,6 +151,7 @@ where
     type ShapeReturn<'a> = &'a Vec<usize> where Self: 'a;
     type TensorRef<'a> = RcTensor<Self::Elem> where Self: 'a;
     type ResultTensorType<'a>= RcTensor<T> where Self: 'a; // &'tensor Tensor<Self::Elem> where Self : 'tensor;
+    type SumType = Scalar<Self::Elem>;
 
     fn shape(&self) -> Self::ShapeReturn<'_> {
         self.deref().shape()
@@ -143,8 +160,11 @@ where
     fn get(&self, index: &Vec<usize>) -> Result<&Self::Elem, String> {
         self.deref().get(index)
     }
-    fn sum(&self) -> Self::Elem {
-        self.0.sum()
+
+    fn sum(&self) -> Self::SumType {
+        let mut raw_scalar = self.0.sum();
+        raw_scalar.derivative = Some(Derivative::new(vec![self.clone()], ones));
+        Scalar::from_raw(raw_scalar)
     }
 
     fn tensor(&self) -> Self::TensorRef<'_> {
@@ -307,6 +327,10 @@ impl<T> RawTensor<T>
 where
     T: Numeric,
 {
+    pub fn is_scalar(&self) -> bool {
+        self.array.len() == 1 && self.shape.is_empty()
+    }
+
     fn get_global_index(
         &self,
         index: &Vec<usize>,
@@ -389,8 +413,16 @@ where
             ..Default::default()
         }
     }
+
+    /// Note! This function will construct Scalars
     pub fn new_with_filler(shape: Vec<usize>, filler: T) -> RawTensor<T> {
-        assert!(!shape.is_empty());
+        if shape.is_empty() {
+            return RawTensor {
+                array: vec![filler],
+                shape,
+                ..Default::default()
+            };
+        }
         let mut total = 1;
         for &dim in shape.iter() {
             total *= dim;
@@ -456,7 +488,10 @@ where
     /// ```
     fn get(&self, index: &Vec<usize>) -> Result<&T, String> {
         match self.get_global_index(index, None) {
-            Ok(global_idx) => Ok(&self.array[global_idx]),
+            Ok(global_idx) => {
+                // dbg!("self={}, index={}, global_idx={}", self, index, global_idx);
+                Ok(&self.array[global_idx])
+            }
             Err(e) => Err(e),
         }
     }
@@ -512,14 +547,22 @@ where
     type ShapeReturn<'a> = &'a Vec<usize> where Self : 'a ;
     type TensorRef<'tensor> = &'tensor RawTensor<Self::Elem> where Self : 'tensor;
     type ResultTensorType<'a>= RawTensor<T> where Self: 'a; // &'tensor Tensor<Self::Elem> where Self : 'tensor;
+    type SumType = Self;
     fn shape(&self) -> Self::ShapeReturn<'_> {
         &self.shape
     }
 
-    fn sum(&self) -> Self::Elem {
-        self.array
+    fn sum(&self) -> Self::SumType {
+        let v = self
+            .array
             .iter()
-            .fold(Self::Elem::zero(), |acc, x| acc + *x)
+            .fold(Self::Elem::zero(), |acc, x| acc + *x);
+        let scalar = RawTensor::from(v);
+        scalar.set_grad(RcTensor::new_with_filler(
+            self.shape.clone(),
+            Self::Elem::one(),
+        ));
+        scalar
     }
 
     fn tensor(&self) -> Self::TensorRef<'_> {
@@ -634,6 +677,25 @@ where
     }
 }
 
+fn element_wise_multiplication<T: Numeric>(
+    left: &impl TensorLike<Elem = T>,
+    right: &impl TensorLike<Elem = T>,
+) -> RawTensor<T> {
+    let left_shape_vec = left.shape().to_vec();
+    assert!(left_shape_vec == right.shape().to_vec());
+    let length = left.shape().iter().fold(1, |acc, x| acc * x);
+    let mut array = Vec::with_capacity(length);
+    for (&x, &y) in ElementIterator::new(left).zip(ElementIterator::new(right)) {
+        array.push(x * y);
+    }
+
+    dbg!("left={}, right={},", &left, &right);
+    dbg!("array={}, shape={},", &array, &left_shape_vec,);
+    let result = RawTensor::new(array, left_shape_vec);
+    dbg!("result={:?}", &result);
+    result
+}
+
 impl<T, U> Mul<&U> for &RawTensor<T>
 where
     T: Numeric,
@@ -648,11 +710,7 @@ where
         if right.shape().len() == 0 {
             return self.right_scalar_multiplication(&right.get_first_elem());
         }
-        if self.shape.len() == 1 {
-            return self.dot(right);
-        }
-        unimplemented!("need to get element wise multiplication working!")
-        // self.bmm_raw(right)
+        element_wise_multiplication(self, right)
     }
 }
 

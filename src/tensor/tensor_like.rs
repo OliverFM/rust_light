@@ -1,6 +1,6 @@
 use super::numeric::*;
 use super::utils::IndexIterator;
-use crate::tensor::{RawTensor, RcTensor, SliceRange, TensorView};
+use crate::tensor::{RawTensor, RcTensor, Scalar, SliceRange, TensorView};
 use std::ops::Deref;
 
 pub trait TensorLikePublic: TensorLike {}
@@ -14,12 +14,12 @@ where
 
 pub trait HasGrad {
     type GradType: TensorLike;
-    fn set_grad(&mut self, grad: Self::GradType) {
+    fn set_grad(&self, grad: Self::GradType) {
         todo!();
     }
 }
 
-pub trait TensorLike: HasGrad {
+pub trait TensorLike: HasGrad + std::fmt::Debug {
     type Elem: Numeric;
     type ShapeReturn<'a>: Deref<Target = Vec<usize>>
     where
@@ -30,17 +30,23 @@ pub trait TensorLike: HasGrad {
     type ResultTensorType<'a>: TensorLike
     where
         Self: 'a;
-
+    type SumType: TensorLike<Elem = Self::Elem>;
     fn get(&self, index: &Vec<usize>) -> Result<&Self::Elem, String>;
 
+    #[inline]
     fn get_first_elem(&self) -> &Self::Elem {
         let shape = vec![0; self.shape().deref().len()];
         self.get(&shape).unwrap()
     }
 
+    fn elem(&self) -> Self::Elem {
+        assert!(self.shape().is_empty());
+        *self.get_first_elem()
+    }
+
     fn shape(&self) -> Self::ShapeReturn<'_>;
 
-    fn sum(&self) -> Self::Elem;
+    fn sum(&self) -> Self::SumType;
 
     /// Return a reference to the underlying tensor
     fn tensor(&self) -> Self::TensorRef<'_>;
