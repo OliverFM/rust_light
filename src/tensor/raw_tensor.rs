@@ -1,7 +1,7 @@
 use itertools::{EitherOrBoth::*, Itertools};
 use num::traits::real::Real;
 
-use std::cell::{Ref, RefCell};
+use std::cell::{RefCell};
 use std::cmp::{max, PartialEq};
 use std::convert::From;
 use std::ops::{Add, Deref, Index, Mul, Neg, Sub};

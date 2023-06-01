@@ -1,5 +1,5 @@
 use super::numeric::*;
-use crate::tensor::{ElementIterator, HasGrad, RawTensor, RcTensor, TensorLike};
+use crate::tensor::{ElementIterator, RawTensor, RcTensor, TensorLike};
 use num::traits::real::Real;
 
 #[derive(Debug, PartialEq, Clone)]
@@ -22,16 +22,16 @@ impl<T: Numeric> Derivative<T>
     pub fn compute(&self) -> RcTensor<T> {
         // TODO: add chain rule in
         assert!(self.inputs.len() <= 1);
-        let grad = if let Some(grad) = self.inputs[0].compute_grad() {
-            &(self.derivative)(self.inputs.clone()) * &grad
-        } else {
-            (self.derivative)(self.inputs.clone())
-        };
+        
         // f(g(h(x))) how do i set x.grad if we are now computing f'
         // grad = f'(g(hx)) g'(h(x)) h'(x)
         // f(g(h(x), z)) how do i set x.grad if we are now computing f'
         // self.inputs[0].set_grad(grad.clone());
-        grad
+        if let Some(grad) = self.inputs[0].compute_grad() {
+            &(self.derivative)(self.inputs.clone()) * &grad
+        } else {
+            (self.derivative)(self.inputs.clone())
+        }
     }
 }
 
