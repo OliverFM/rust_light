@@ -166,3 +166,11 @@ fn test_right_scalar_multiplication() {
         RawTensor::new(vec![42, 42, 42, 42], vec![4])
     );
 }
+
+#[test]
+fn test_element_wise_multiplication() {
+    let left = RcTensor::from([1, 2, 3]);
+    let right = RcTensor::from([7, 2, 8]);
+    dbg!("left={}, right={},", &left, &right);
+    assert_eq!(&left * &right, RcTensor::from([7, 4, 24]));
+}

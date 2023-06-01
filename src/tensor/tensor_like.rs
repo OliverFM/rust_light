@@ -12,7 +12,14 @@ where
 {
 }
 
-pub trait TensorLike {
+pub trait HasGrad {
+    type GradType: TensorLike;
+    fn set_grad(&self, _grad: Self::GradType) {
+        todo!();
+    }
+}
+
+pub trait TensorLike: HasGrad + std::fmt::Debug {
     type Elem: Numeric;
     type ShapeReturn<'a>: Deref<Target = Vec<usize>>
     where
@@ -23,24 +30,30 @@ pub trait TensorLike {
     type ResultTensorType<'a>: TensorLike
     where
         Self: 'a;
-
+    type SumType: TensorLike<Elem = Self::Elem>;
     fn get(&self, index: &Vec<usize>) -> Result<&Self::Elem, String>;
 
+    #[inline]
     fn get_first_elem(&self) -> &Self::Elem {
         let shape = vec![0; self.shape().deref().len()];
         self.get(&shape).unwrap()
     }
 
+    fn elem(&self) -> Self::Elem {
+        assert!(self.shape().is_empty());
+        *self.get_first_elem()
+    }
+
     fn shape(&self) -> Self::ShapeReturn<'_>;
 
-    fn sum(&self) -> Self::Elem;
+    fn sum(&self) -> Self::SumType;
 
     /// Return a reference to the underlying tensor
     fn tensor(&self) -> Self::TensorRef<'_>;
 
     /// Convert this self into a new Tensor -- is self is already a Tensor this is a clone.
     /// for a `TensorView`, for example, the new Tensor is the same shape as the view.
-    fn to_tensor(&self) -> RawTensor<Self::Elem>;
+    fn to_tensor(&self) -> RcTensor<Self::Elem>;
 
     fn slice(&self, offset: Vec<SliceRange>) -> TensorView<Self::Elem>;
 

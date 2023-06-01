@@ -1,8 +1,8 @@
 use super::numeric::*;
-use crate::tensor::{ElementIterator, RawTensor, RcTensor, SliceRange, TensorLike};
+use crate::tensor::{ElementIterator, HasGrad, RcTensor, Scalar, SliceRange, TensorLike};
 
 use std::cmp::PartialEq;
-use std::ops::{Index};
+use std::ops::Index;
 
 #[derive(Debug, Clone)]
 pub struct TensorView<T>
@@ -46,10 +46,14 @@ where
             shape, // TODO: fix this
         }
     }
-    pub fn to_tensor(&self) -> RawTensor<T> {
-        // self.tensor.clone()
-        todo!()
-    }
+    // pub fn to_tensor(&self) -> RcTensor<T> {
+    //     // self.tensor.clone()
+    //     todo!()
+    // }
+}
+
+impl<T: Numeric> HasGrad for TensorView<T> {
+    type GradType = RcTensor<T>;
 }
 
 impl<T> TensorLike for TensorView<T>
@@ -60,6 +64,7 @@ where
     type ShapeReturn<'a> = &'a Vec<usize> where Self: 'a ;
     type TensorRef<'a>= RcTensor<T> where Self: 'a; // &'tensor Tensor<Self::Elem> where Self : 'tensor;
     type ResultTensorType<'a>= RcTensor<T> where Self: 'a; // &'tensor Tensor<Self::Elem> where Self : 'tensor;
+    type SumType = Scalar<Self::Elem>;
     fn shape(&self) -> Self::ShapeReturn<'_> {
         &self.shape
     }
@@ -69,15 +74,16 @@ where
         self.tensor.clone()
     }
 
-    fn to_tensor(&self) -> RawTensor<T> {
+    fn to_tensor(&self) -> RcTensor<T> {
         todo!();
         // let mut tensor = Tensor::new_empty(self.shape);
     }
 
-    fn sum(&self) -> Self::Elem {
+    fn sum(&self) -> Scalar<Self::Elem> {
         let iter = ElementIterator::new(self);
 
-        iter.fold(Self::Elem::zero(), |acc, x| acc + *x)
+        let v = iter.fold(Self::Elem::zero(), |acc, x| acc + *x);
+        Scalar::from(v)
     }
 
     fn get(&self, index: &Vec<usize>) -> Result<&T, String> {
@@ -99,7 +105,7 @@ where
     }
 }
 
-impl<'a, T, V> PartialEq<V> for TensorView<T>
+impl<T, V> PartialEq<V> for TensorView<T>
 where
     T: Numeric,
     V: TensorLike<Elem = T>,
@@ -120,6 +126,7 @@ where
 
 #[test]
 fn test_sum_tensor_view() {
+    use crate::tensor::RawTensor;
     let tensor = RawTensor::from([
         [[0, 1, 2, 3], [2, 3, 4, 5], [3, 4, 5, 6]],
         [[0, 1, 2, 3], [2, 3, 4, 5], [3, 4, 5, 6]],
@@ -130,5 +137,5 @@ fn test_sum_tensor_view() {
         SliceRange::new(2, 4),
     ]);
 
-    assert_eq!(view.sum(), 2 * (4 + 5));
+    assert_eq!(view.sum().elem(), 2 * (4 + 5));
 }
