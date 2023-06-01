@@ -70,7 +70,9 @@ impl<T: Numeric> RcTensor<T> {
     pub fn compute_grad(&self) -> Option<Self> {
         // TODO: don't just unwrap, switch to a Result type and deal with the case of no gradient
         // appropriately
-        self.derivative.as_ref().map(|derivative| derivative.compute())
+        self.derivative
+            .as_ref()
+            .map(|derivative| derivative.compute())
     }
 
     fn new_empty(shape: Vec<usize>) -> RcTensor<T> {

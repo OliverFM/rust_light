@@ -1,7 +1,5 @@
 use super::numeric::*;
-use crate::tensor::{
-    ElementIterator, HasGrad, RcTensor, Scalar, SliceRange, TensorLike,
-};
+use crate::tensor::{ElementIterator, HasGrad, RcTensor, Scalar, SliceRange, TensorLike};
 
 use std::cmp::PartialEq;
 use std::ops::Index;
@@ -128,6 +126,7 @@ where
 
 #[test]
 fn test_sum_tensor_view() {
+    use crate::tensor::RawTensor;
     let tensor = RawTensor::from([
         [[0, 1, 2, 3], [2, 3, 4, 5], [3, 4, 5, 6]],
         [[0, 1, 2, 3], [2, 3, 4, 5], [3, 4, 5, 6]],
