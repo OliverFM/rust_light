@@ -1,44 +1,47 @@
 use crate::tensor::numeric::Numeric;
 use crate::tensor::TensorLike;
 
-pub struct ElementIterator<'b, T, U>
+pub struct ElementIterator<T, U, V>
 where
-    U: TensorLike<Elem = T>,
+    U: Deref<Target = V>,
+    V: TensorLike<Elem = T>,
     T: Numeric,
 {
     index: Vec<usize>,
-    tensor_like: &'b U,
+    tensor_like: U,
     first: bool,
 }
 
-impl<'b, T, U> ElementIterator<'b, T, U>
+impl<T, U, V> ElementIterator<T, U, V>
 where
-    U: TensorLike<Elem = T>,
     T: Numeric,
+    U: Deref<Target = V> + Clone,
+    V: TensorLike<Elem = T>,
 {
-    pub fn new(tensor_like: &'b U) -> ElementIterator<'b, T, U> {
+    pub fn new(tensor_like: U) -> ElementIterator<T, U, V> {
         ElementIterator {
-            index: vec![0; tensor_like.shape().len()],
-            tensor_like,
+            index: vec![0; tensor_like.deref().shape().len()],
+            tensor_like: tensor_like.clone(),
             first: true,
         }
     }
 }
 
-impl<'b, T: 'b, U> Iterator for ElementIterator<'b, T, U>
+impl<T, U, V> Iterator for ElementIterator<T, U, V>
 where
-    U: TensorLike<Elem = T>,
     T: Numeric,
+    U: Deref<Target = V>,
+    V: TensorLike<Elem = T>,
 {
-    type Item = &'b T;
+    type Item = T;
     fn next(&mut self) -> Option<Self::Item> {
         if self.first {
             self.first = false;
-            let elem = self.tensor_like.get(&self.index).unwrap();
+            let &elem = self.tensor_like.get(&self.index).unwrap();
             return Some(elem);
         }
         if increment_index(&mut self.index, self.tensor_like.shape()) {
-            let elem = self.tensor_like.get(&self.index).unwrap();
+            let &elem = self.tensor_like.get(&self.index).unwrap();
             return Some(elem);
         }
         None
@@ -53,7 +56,7 @@ fn test_element_iterator() {
     let view = tensor.view(vec![SliceRange::new(0, 3)]);
     let tensor_element_iterator = ElementIterator::new(&tensor);
     let element_iterator = ElementIterator::new(&view);
-    for ((view_elem, tensor_elem), expected) in
+    for ((view_elem, tensor_elem), &expected) in
         element_iterator.zip(tensor_element_iterator).zip(v.iter())
     {
         // println!("elem={elem:?}, expected={expected:?}");

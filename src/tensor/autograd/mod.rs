@@ -22,7 +22,7 @@ impl<T: Numeric> Derivative<T>
     pub fn compute(&self) -> RcTensor<T> {
         // TODO: add chain rule in
         assert!(self.inputs.len() <= 1);
-        
+
         // f(g(h(x))) how do i set x.grad if we are now computing f'
         // grad = f'(g(hx)) g'(h(x)) h'(x)
         // f(g(h(x), z)) how do i set x.grad if we are now computing f'

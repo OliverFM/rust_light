@@ -82,7 +82,7 @@ where
     fn sum(&self) -> Scalar<Self::Elem> {
         let iter = ElementIterator::new(self);
 
-        let v = iter.fold(Self::Elem::zero(), |acc, x| acc + *x);
+        let v = iter.fold(Self::Elem::zero(), |acc, x| acc + x);
         Scalar::from(v)
     }
 
