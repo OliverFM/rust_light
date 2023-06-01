@@ -721,14 +721,15 @@ where
     }
 }
 
-impl<T, U> Mul<&U> for &RcTensor<T>
+impl<T, U, V> Mul<U> for &RcTensor<T>
 where
     T: Numeric,
-    U: TensorLike<Elem = T>,
+    U: Deref<Target = V> + Clone + std::fmt::Debug,
+    V: TensorLike<Elem = T>,
 {
     type Output = RcTensor<T>;
 
-    fn mul(self, right: &U) -> Self::Output {
+    fn mul(self, right: U) -> Self::Output {
         let raw_tensor = self.0.deref().mul(right);
         RcTensor::from_raw(raw_tensor)
     }
@@ -750,4 +751,22 @@ where
 //         }
 //         self.bmm_raw(right)
 //     }
+// }
+
+#[test]
+fn test_element_wise_multiplication() {
+    let left = RcTensor::from([1, 2, 3]);
+    let right = RcTensor::from([7, 2, 8]);
+    dbg!("left={}, right={},", &left, &right);
+    assert_eq!(&left * &right, RcTensor::from([7, 4, 24]));
+}
+
+// TODO: get this test to work: not sure why it doesn't work since RcTensor implements
+// Deref<RawTensor>
+// #[test]
+// fn test_element_wise_multiplication_on_rc_tensor_directly() {
+//     let left = RcTensor::from([1, 2, 3]);
+//     let right = RcTensor::from([7, 2, 8]);
+//     dbg!("left={}, right={},", &left, &right);
+//     assert_eq!(left * right, RcTensor::from([7, 4, 24]));
 // }
