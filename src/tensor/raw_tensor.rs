@@ -735,6 +735,20 @@ where
     }
 }
 
+impl<T, U, V> Mul<U> for RcTensor<T>
+where
+    T: Numeric,
+    U: Deref<Target = V> + Clone + std::fmt::Debug,
+    V: TensorLike<Elem = T>,
+{
+    type Output = RcTensor<T>;
+
+    fn mul(self, right: U) -> Self::Output {
+        let raw_tensor = self.0.deref().mul(right);
+        RcTensor::from_raw(raw_tensor)
+    }
+}
+
 // trait Private: TensorLike {}
 // impl<T: Numeric> Private for RawTensor<T> {}
 //
