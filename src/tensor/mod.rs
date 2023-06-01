@@ -13,7 +13,7 @@ pub use utils::*;
 
 use itertools::{EitherOrBoth::*, Itertools};
 
-use std::cell::RefCell;
+use std::cell::{Ref, RefCell};
 use std::cmp::{max, PartialEq};
 use std::convert::From;
 use std::ops::{Add, Deref, Index, Mul, Neg, Sub};
@@ -39,8 +39,6 @@ impl SliceRange {
     }
 }
 
-/// Idea: Drop the RefCell. Make Tensors immutable. Then make MutableTensor which is not TensorLike
-/// Note: would need to figure out parents of the RawTensor before making it immutable
 #[derive(Debug, PartialEq, Clone)]
 pub struct RcTensor<T: Numeric>(Rc<RawTensor<T>>);
 
@@ -119,6 +117,13 @@ impl<T: Numeric> RcTensor<T> {
 
     fn get_with_offset(&self, index: &Vec<usize>, offset: &Vec<SliceRange>) -> Result<&T, String> {
         self.deref().get_with_offset(index, offset)
+    }
+
+    fn get_grad<'a>(&self) -> RefCell<Option<RcTensor<T>>>
+    where
+        Self: 'a,
+    {
+        self.0.grad.clone()
     }
 }
 
