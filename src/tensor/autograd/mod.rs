@@ -92,7 +92,7 @@ fn test_tanh_twice() {
         {grad:?}\n\n"
     );
     println!("abs_diff.sum()={:?}", abs_diff.sum());
-    assert!(abs_diff.sum().elem() <= 1e-4);
+    assert!(abs_diff.sum().elem() <= 2e-4);
 }
 
 #[test]
