@@ -649,6 +649,7 @@ where
         let length = max(right.shape().len(), self.shape.len());
         let mut max_shape = Vec::with_capacity(length);
 
+        // TODO: consider getting rid of itertools
         for pair in self
             .shape
             .iter()
