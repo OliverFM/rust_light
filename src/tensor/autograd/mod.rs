@@ -22,9 +22,13 @@ impl<T: Numeric> Derivative<T>
     pub fn compute(&self) -> RcTensor<T> {
         // TODO: add chain rule in
         assert!(self.inputs.len() <= 1);
+        
+        // f(g(h(x))) how do i set x.grad if we are now computing f'
+        // grad = f'(g(hx)) g'(h(x)) h'(x)
+        // f(g(h(x), z)) how do i set x.grad if we are now computing f'
+        // self.inputs[0].set_grad(grad.clone());
         if let Some(grad) = self.inputs[0].compute_grad() {
             &(self.derivative)(self.inputs.clone()) * &grad
-            // (self.derivative)(self.inputs.clone())
         } else {
             (self.derivative)(self.inputs.clone())
         }
@@ -64,8 +68,9 @@ fn tanh_derivative<T: Numeric + Real>(tensor: &RcTensor<T>) -> RcTensor<T> {
     RcTensor::new(array, tensor.shape().clone())
 }
 
+#[ignore]
 #[test]
-fn test_tanh_twice() {
+fn test_tanh_twice_sets_grad() {
     let input = RcTensor::from([0.666]);
     let epsilon = 1e-12 as f64;
     let output = tanh(&tanh(&input)).sum();
@@ -80,7 +85,43 @@ fn test_tanh_twice() {
     );
     println!("____={:?}\n\n", RcTensor::scalar(epsilon));
     let numerical_derivative = &RcTensor::scalar(1.0 / epsilon) * &(&output_perturbed - &output);
+    output.derivative.clone().unwrap().compute();
+    let grad = input.get_grad().take().unwrap();
+    println!("input.get_grad()={:?}", input.get_grad());
+    let abs_diff = (&numerical_derivative - &grad).abs();
+    println!(
+        "numerical_derivative=
+    {numerical_derivative:?}\n\n"
+    );
+
+    println!(
+        "grad=
+        {grad:?}\n\n"
+    );
+    println!("abs_diff.sum()={:?}", abs_diff.sum());
+    assert!(abs_diff.sum().elem() <= 2e-4);
+}
+
+#[test]
+fn test_tanh_twice() {
+    let input = RcTensor::from([0.666]);
+    let epsilon = 1e-12 as f64;
+    let output = tanh(&tanh(&input)).sum();
+    let output_perturbed = tanh(&tanh(&(&input + &RcTensor::scalar(epsilon)))).sum();
+    println!(
+        "output_perturbed=
+    {output_perturbed:?}"
+    );
+    println!(
+        "output=
+    {output:?}"
+    );
+    println!("epsilon={:?}\n\n", RcTensor::scalar(epsilon));
+    let numerical_derivative = &RcTensor::scalar(1.0 / epsilon) * &(&output_perturbed - &output);
+    // output.derivative.clone().unwrap().compute();
+    // let grad = input.get_grad().take().unwrap();
     let grad = output.derivative.clone().unwrap().compute();
+    println!("input.get_grad()={:?}", input.get_grad());
     let abs_diff = (&numerical_derivative - &grad).abs();
     println!(
         "numerical_derivative=
