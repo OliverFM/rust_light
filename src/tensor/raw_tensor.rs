@@ -59,7 +59,7 @@ impl<T: Numeric> RcTensor<T> {
         RcTensor(Rc::new(raw_tensor))
     }
 
-    pub fn compute_grad(&self) -> Option<Self> {
+    pub(super) fn compute_grad(&self) -> Option<Self> {
         // TODO: don't just unwrap, switch to a Result type and deal with the case of no gradient
         // appropriately
         self.derivative

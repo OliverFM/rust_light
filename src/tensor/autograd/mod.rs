@@ -24,10 +24,12 @@ impl<T: Numeric> Derivative<T>
         assert!(self.inputs.len() <= 1);
         let grad = if let Some(grad) = self.inputs[0].compute_grad() {
             &(self.derivative)(self.inputs.clone()) * &grad
-            // (self.derivative)(self.inputs.clone())
         } else {
             (self.derivative)(self.inputs.clone())
         };
+        // f(g(h(x))) how do i set x.grad if we are now computing f'
+        // grad = f'(g(hx)) g'(h(x)) h'(x)
+        // f(g(h(x), z)) how do i set x.grad if we are now computing f'
         // self.inputs[0].set_grad(grad.clone());
         grad
     }
