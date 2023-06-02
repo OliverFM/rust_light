@@ -1,19 +1,19 @@
 use std::rc::Rc;
 
-use itertools::{EitherOrBoth::*, Itertools};
-use num::traits::real::Real;
+
+
 
 use std::cell::RefCell;
-use std::cmp::{max, PartialEq};
+use std::cmp::{PartialEq};
 use std::convert::From;
-use std::ops::{Add, Deref, Index, Mul, Neg, Sub};
+use std::ops::{Deref, Mul};
 
-use super::autograd::{self, Derivative};
+use super::autograd::{Derivative};
 use super::numeric::*;
 use super::raw_tensor::*;
 use super::tensor_like::*;
 use super::tensor_view::*;
-use super::utils::*;
+
 
 fn ones<T: Numeric>(tensors: Vec<RcTensor<T>>) -> RcTensor<T> {
     assert_eq!(tensors.len(), 1);
