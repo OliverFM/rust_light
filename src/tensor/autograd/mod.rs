@@ -9,6 +9,19 @@ pub struct Derivative<T: Numeric> {
     derivative: fn(Vec<RcTensor<T>>) -> RcTensor<T>,
 }
 
+fn pass_through<T: Numeric>(tensors: Vec<RcTensor<T>>) -> RcTensor<T> {
+    tensors[0].clone()
+}
+
+impl<T: Numeric> Default for Derivative<T> {
+    fn default() -> Self {
+        Derivative {
+            inputs: Vec::new(),
+            derivative: pass_through,
+        }
+    }
+}
+
 impl<T: Numeric> Derivative<T>
 // where RcTensor<T>: Mul<Output = RcTensor<T>>
 {
@@ -18,6 +31,13 @@ impl<T: Numeric> Derivative<T>
     ) -> Derivative<T> {
         Derivative { inputs, derivative }
     }
+    pub(crate) fn pass_grad_back(&self, grad: RcTensor<T>) {
+        self.inputs[0].set_grad(grad.clone());
+        self.inputs[0]
+            .derivative
+            .iter()
+            .for_each(|d| d.pass_grad_back(grad.clone()))
+    }
 
     pub fn compute(&self) -> RcTensor<T> {
         // TODO: add chain rule in
@@ -26,8 +46,7 @@ impl<T: Numeric> Derivative<T>
         // f(g(h(x))) how do i set x.grad if we are now computing f'
         // grad = f'(g(hx)) g'(h(x)) h'(x)
         // f(g(h(x), z)) how do i set x.grad if we are now computing f'
-        // self.inputs[0].set_grad(grad.clone());
-        if let Some(grad) = self.inputs[0].compute_grad() {
+        let grad = if let Some(grad) = self.inputs[0].compute_grad() {
             let self_grad = (self.derivative)(self.inputs.clone());
             // TODO: consider moving this logic into a generalised_mul function.
             if self_grad.is_scalar() || self_grad.shape().iter().product::<usize>() == 1 {
@@ -38,7 +57,10 @@ impl<T: Numeric> Derivative<T>
             }
         } else {
             (self.derivative)(self.inputs.clone())
-        }
+        };
+        println!("grad={:?}", &grad);
+        self.pass_grad_back(grad.clone());
+        grad
     }
 }
 
@@ -75,7 +97,6 @@ fn tanh_derivative<T: Numeric + Real>(tensor: &RcTensor<T>) -> RcTensor<T> {
     RcTensor::new(array, tensor.shape().clone())
 }
 
-#[ignore]
 #[test]
 fn test_tanh_twice_sets_grad() {
     let input = RcTensor::from([0.666]);

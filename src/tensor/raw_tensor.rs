@@ -7,6 +7,7 @@ use std::convert::From;
 use std::ops::{Add, Deref, Index, Mul, Neg, Sub};
 
 use super::autograd::{self, Derivative};
+use super::functional as F;
 use super::numeric::*;
 use super::rc_tensor::*;
 use super::tensor_like::*;
@@ -33,11 +34,6 @@ impl SliceRange {
     }
 }
 
-// DEBUG: disabling test till more features are in
-// #[ignore]
-// #[test]
-// fn test_user_tensor_multiplication() {}
-//
 /// The core `struct` in this library.
 #[derive(Debug, Clone)]
 pub struct RawTensor<T>
@@ -357,6 +353,14 @@ where
     type ResultTensorType<'a>= RawTensor<T> where Self: 'a; // &'tensor Tensor<Self::Elem> where Self : 'tensor;
     type SumType = Self;
     type GradType = RcTensor<T>;
+
+    fn dot<U, V>(&self, other: U) -> RcTensor<Self::Elem>
+    where
+        U: Deref<Target = V> + std::fmt::Debug + Clone,
+        V: TensorLike<Elem = Self::Elem>,
+    {
+        F::dot(self, other)
+    }
 
     fn set_grad(&self, grad: Self::GradType) {
         *self.grad.borrow_mut() = Some(grad);
