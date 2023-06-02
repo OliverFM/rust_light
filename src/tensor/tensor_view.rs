@@ -1,5 +1,5 @@
 use super::numeric::*;
-use crate::tensor::{ElementIterator, HasGrad, RcTensor, Scalar, SliceRange, TensorLike};
+use crate::tensor::{ElementIterator, RcTensor, Scalar, SliceRange, TensorLike, TensorLikePrivate};
 
 use std::cmp::PartialEq;
 use std::ops::Index;
@@ -52,9 +52,7 @@ where
     // }
 }
 
-impl<T: Numeric> HasGrad for TensorView<T> {
-    type GradType = RcTensor<T>;
-}
+impl<T> TensorLikePrivate for TensorView<T> where T: Numeric {}
 
 impl<T> TensorLike for TensorView<T>
 where
@@ -65,6 +63,8 @@ where
     type TensorRef<'a>= RcTensor<T> where Self: 'a; // &'tensor Tensor<Self::Elem> where Self : 'tensor;
     type ResultTensorType<'a>= RcTensor<T> where Self: 'a; // &'tensor Tensor<Self::Elem> where Self : 'tensor;
     type SumType = Scalar<Self::Elem>;
+    type GradType = RcTensor<T>;
+
     fn shape(&self) -> Self::ShapeReturn<'_> {
         &self.shape
     }
