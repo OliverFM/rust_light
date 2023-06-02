@@ -1,10 +1,10 @@
 use super::super::numeric::*;
-use crate::tensor::autograd::{self, Derivative};
-use crate::tensor::utils::IndexIterator;
+use crate::tensor::autograd::{Derivative};
+
 use crate::tensor::{RawTensor, RcTensor, TensorLike};
 use std::ops::Deref;
 
-pub(crate) fn todo_deriv<T: Numeric>(inputs: Vec<RcTensor<T>>) -> RcTensor<T> {
+pub(crate) fn todo_deriv<T: Numeric>(_inputs: Vec<RcTensor<T>>) -> RcTensor<T> {
     todo!()
 }
 
