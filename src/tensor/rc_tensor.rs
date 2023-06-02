@@ -1,19 +1,16 @@
 use std::rc::Rc;
 
-
-
-
 use std::cell::RefCell;
-use std::cmp::{PartialEq};
+use std::cmp::PartialEq;
 use std::convert::From;
 use std::ops::{Deref, Mul};
 
-use super::autograd::{Derivative};
+use super::autograd::Derivative;
+use super::functional as F;
 use super::numeric::*;
 use super::raw_tensor::*;
 use super::tensor_like::*;
 use super::tensor_view::*;
-
 
 fn ones<T: Numeric>(tensors: Vec<RcTensor<T>>) -> RcTensor<T> {
     assert_eq!(tensors.len(), 1);
@@ -122,6 +119,14 @@ where
 
     fn set_grad(&self, grad: Self::GradType) {
         *self.grad.borrow_mut() = Some(grad);
+    }
+
+    fn dot<U, V>(&self, other: U) -> RcTensor<Self::Elem>
+    where
+        U: Deref<Target = V> + std::fmt::Debug + Clone,
+        V: TensorLike<Elem = Self::Elem>,
+    {
+        F::dot(self, other)
     }
 
     fn shape(&self) -> Self::ShapeReturn<'_> {

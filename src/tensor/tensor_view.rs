@@ -1,8 +1,9 @@
+use super::functional as F;
 use super::numeric::*;
 use crate::tensor::{ElementIterator, RcTensor, Scalar, SliceRange, TensorLike, TensorLikePrivate};
 
 use std::cmp::PartialEq;
-use std::ops::Index;
+use std::ops::{Deref, Index};
 
 #[derive(Debug, Clone)]
 pub struct TensorView<T>
@@ -64,6 +65,14 @@ where
     type ResultTensorType<'a>= RcTensor<T> where Self: 'a; // &'tensor Tensor<Self::Elem> where Self : 'tensor;
     type SumType = Scalar<Self::Elem>;
     type GradType = RcTensor<T>;
+
+    fn dot<U, V>(&self, other: U) -> RcTensor<Self::Elem>
+    where
+        U: Deref<Target = V> + std::fmt::Debug + Clone,
+        V: TensorLike<Elem = Self::Elem>,
+    {
+        F::dot(self, other)
+    }
 
     fn shape(&self) -> Self::ShapeReturn<'_> {
         &self.shape

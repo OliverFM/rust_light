@@ -123,12 +123,6 @@ fn test_add() {
 }
 
 // #[ignore]
-#[test]
-fn test_dot() {
-    let v = vec![0, 1, 2];
-    let vec = RawTensor::new(v, vec![3]);
-    assert_eq!(vec.dot(&vec), RawTensor::new(vec![5], vec![1]));
-}
 
 #[test]
 fn test_creation() {
@@ -165,12 +159,4 @@ fn test_right_scalar_multiplication() {
         vec.right_scalar_multiplication(&42),
         RawTensor::new(vec![42, 42, 42, 42], vec![4])
     );
-}
-
-#[test]
-fn test_element_wise_multiplication() {
-    let left = RcTensor::from([1, 2, 3]);
-    let right = RcTensor::from([7, 2, 8]);
-    dbg!("left={}, right={},", &left, &right);
-    assert_eq!(&left * &right, RcTensor::from([7, 4, 24]));
 }

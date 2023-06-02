@@ -1,6 +1,8 @@
+use super::autograd::{self, Derivative};
+use super::functional as F;
 use super::numeric::*;
 use super::utils::IndexIterator;
-use crate::tensor::{RawTensor, RcTensor, SliceRange, TensorView};
+use super::{RawTensor, RcTensor, SliceRange, TensorView};
 use std::ops::Deref;
 
 pub trait TensorLikePublic: TensorLike {}
@@ -78,22 +80,10 @@ pub trait TensorLike: TensorLikePrivate + std::fmt::Debug {
     }
 
     // TODO: split this by return type in the same way as bmm
-    fn dot<U>(&self, other: &U) -> RawTensor<Self::Elem>
+    fn dot<U, V>(&self, other: U) -> RcTensor<Self::Elem>
     where
-        U: TensorLike<Elem = Self::Elem>,
-    {
-        //! generalised dot product: returns to acculumulated sum of the elementwise product.
-        assert!(self.same_shape(other));
-        let mut result = Self::Elem::zero();
-        for i in 0..self.tensor().array.len() {
-            result = result + self.tensor().array[i] * other.tensor().array[i];
-        }
-        RawTensor {
-            array: vec![result],
-            shape: vec![1],
-            ..Default::default()
-        }
-    }
+        U: Deref<Target = V> + std::fmt::Debug + Clone,
+        V: TensorLike<Elem = Self::Elem>;
 
     /// A Naive batch matrix multiply operation
     ///
@@ -175,11 +165,12 @@ pub trait TensorLike: TensorLikePrivate + std::fmt::Debug {
         result
     }
 
-    fn same_shape<U>(&self, other: &U) -> bool
+    fn same_shape<U, V>(&self, other: &U) -> bool
     where
-        U: TensorLike<Elem = Self::Elem>,
+        U: Deref<Target = V> + std::fmt::Debug + Clone,
+        V: TensorLike<Elem = Self::Elem>,
     {
-        *self.shape() == *other.shape()
+        *self.shape() == **other.shape()
     }
 
     fn broadcastable<V: Deref<Target = Vec<usize>>>(&self, new_shape: V) -> bool {
@@ -203,4 +194,11 @@ pub trait TensorLike: TensorLikePrivate + std::fmt::Debug {
     fn iter_indices(&self) -> IndexIterator {
         IndexIterator::new(self.shape().clone())
     }
+}
+
+#[test]
+fn test_dot() {
+    let v = vec![0, 1, 2];
+    let vec = RcTensor::new(v, vec![3]);
+    assert_eq!(vec.dot(&vec), RcTensor::new(vec![5], vec![1]));
 }
