@@ -12,14 +12,12 @@ where
 {
 }
 
-pub trait HasGrad {
-    type GradType: TensorLike;
-    fn set_grad(&self, _grad: Self::GradType) {
-        todo!();
-    }
+pub(in crate::tensor) mod private {
+    pub trait TensorLikePrivate {}
 }
+pub use crate::tensor::private::TensorLikePrivate;
 
-pub trait TensorLike: HasGrad + std::fmt::Debug {
+pub trait TensorLike: TensorLikePrivate + std::fmt::Debug {
     type Elem: Numeric;
     type ShapeReturn<'a>: Deref<Target = Vec<usize>>
     where
@@ -31,6 +29,12 @@ pub trait TensorLike: HasGrad + std::fmt::Debug {
     where
         Self: 'a;
     type SumType: TensorLike<Elem = Self::Elem>;
+    type GradType: TensorLike;
+
+    fn set_grad(&self, _grad: Self::GradType) {
+        todo!();
+    }
+
     fn get(&self, index: &Vec<usize>) -> Result<&Self::Elem, String>;
 
     #[inline]
@@ -126,7 +130,8 @@ pub trait TensorLike: HasGrad + std::fmt::Debug {
     where
         U: TensorLike<Elem = Self::Elem>,
     {
-        assert!(2 <= self.shape().len() && self.shape().len() <= 3); // For now we can only do Batch matrix
+        // assert!(2 <= self.shape().len() && self.shape().len() <= 3); // For now we can only do Batch matrix
+        assert!(2 <= self.shape().len()); // For now we can only do Batch matrix
         assert!(right.shape().len() == 2); // rhs must be a matrix
         assert!(self.shape()[self.shape().len() - 1] == right.shape()[right.shape().len() - 2]);
         let new_shape = if self.shape().len() == 2 {

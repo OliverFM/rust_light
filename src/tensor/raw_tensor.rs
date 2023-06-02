@@ -125,25 +125,12 @@ impl<T: Numeric> RcTensor<T> {
     }
 }
 
-impl<T: Numeric> HasGrad for RawTensor<T> {
-    type GradType = RcTensor<T>;
-    fn set_grad(&self, grad: Self::GradType) {
-        *self.grad.borrow_mut() = Some(grad);
-    }
-}
-
-impl<T: Numeric> HasGrad for RcTensor<T> {
-    type GradType = RcTensor<T>;
-    fn set_grad(&self, grad: Self::GradType) {
-        *self.0.grad.borrow_mut() = Some(grad);
-    }
-}
-
 fn ones<T: Numeric>(tensors: Vec<RcTensor<T>>) -> RcTensor<T> {
     assert_eq!(tensors.len(), 1);
     RcTensor::new_with_filler(tensors[0].shape().to_vec(), T::one())
 }
 
+impl<T> TensorLikePrivate for RcTensor<T> where T: Numeric {}
 impl<T> TensorLike for RcTensor<T>
 where
     T: Numeric,
@@ -153,6 +140,11 @@ where
     type TensorRef<'a> = RcTensor<Self::Elem> where Self: 'a;
     type ResultTensorType<'a>= RcTensor<T> where Self: 'a; // &'tensor Tensor<Self::Elem> where Self : 'tensor;
     type SumType = Scalar<Self::Elem>;
+    type GradType = RcTensor<T>;
+
+    fn set_grad(&self, grad: Self::GradType) {
+        *self.grad.borrow_mut() = Some(grad);
+    }
 
     fn shape(&self) -> Self::ShapeReturn<'_> {
         self.deref().shape()
@@ -540,6 +532,7 @@ where
     }
 }
 
+impl<T> TensorLikePrivate for RawTensor<T> where T: Numeric {}
 impl<T> TensorLike for RawTensor<T>
 where
     T: Numeric,
@@ -549,6 +542,11 @@ where
     type TensorRef<'tensor> = &'tensor RawTensor<Self::Elem> where Self : 'tensor;
     type ResultTensorType<'a>= RawTensor<T> where Self: 'a; // &'tensor Tensor<Self::Elem> where Self : 'tensor;
     type SumType = Self;
+    type GradType = RcTensor<T>;
+
+    fn set_grad(&self, grad: Self::GradType) {
+        *self.grad.borrow_mut() = Some(grad);
+    }
     fn shape(&self) -> Self::ShapeReturn<'_> {
         &self.shape
     }

@@ -28,7 +28,14 @@ impl<T: Numeric> Derivative<T>
         // f(g(h(x), z)) how do i set x.grad if we are now computing f'
         // self.inputs[0].set_grad(grad.clone());
         if let Some(grad) = self.inputs[0].compute_grad() {
-            &(self.derivative)(self.inputs.clone()) * &grad
+            let self_grad = (self.derivative)(self.inputs.clone());
+            // TODO: consider moving this logic into a generalised_mul function.
+            if self_grad.is_scalar() || self_grad.shape().iter().product::<usize>() == 1 {
+                assert!(grad.is_scalar() || grad.shape().iter().product::<usize>() == 1);
+                self_grad * grad
+            } else {
+                self_grad.bmm(&grad)
+            }
         } else {
             (self.derivative)(self.inputs.clone())
         }
