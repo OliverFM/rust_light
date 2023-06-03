@@ -8,6 +8,7 @@ use std::ops::{Add, Deref, Index, Mul, Neg, Sub};
 
 use super::autograd::{self, Derivative};
 use super::functional as F;
+use super::functional;
 use super::numeric::*;
 use super::rc_tensor::*;
 use super::tensor_like::*;
@@ -499,28 +500,6 @@ where
     }
 }
 
-fn element_wise_multiplication<T, U1, V1, U2, V2>(left: U1, right: U2) -> RawTensor<T>
-where
-    T: Numeric,
-    U1: Deref<Target = V1> + std::fmt::Debug + Clone,
-    V1: TensorLike<Elem = T>,
-    U2: Deref<Target = V2> + Clone + std::fmt::Debug,
-    V2: TensorLike<Elem = T>,
-{
-    let left_shape_vec = left.shape().to_vec();
-    assert!(left_shape_vec == right.shape().to_vec());
-    let length = left.shape().iter().product();
-    let mut array = Vec::with_capacity(length);
-    // dbg!("left={}, right={},", left.clone(), right.clone());
-    for (x, y) in ElementIterator::new(left).zip(ElementIterator::new(right)) {
-        array.push(x * y);
-    }
-
-    // dbg!("array={}, shape={},", &array, &left_shape_vec,);
-    
-    // dbg!("result={:?}", &result);
-    RawTensor::new(array, left_shape_vec)
-}
 
 impl<T, U, V> Mul<U> for &RawTensor<T>
 where
@@ -537,7 +516,7 @@ where
         if right.shape().len() == 0 {
             return self.right_scalar_multiplication(right.get_first_elem());
         }
-        element_wise_multiplication(self, right)
+        functional::element_wise_multiplication(self, right)
     }
 }
 

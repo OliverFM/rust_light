@@ -95,9 +95,10 @@ impl<T: Numeric> Derivative<T> {
         let self_grad = self_grads[0].clone();
         self.inputs[0].set_grad(self_grad.clone());
         let new_grad = dbg!(self_grad);
-        if let Some(d) = self.inputs[0]
-            .derivative
-            .as_ref() { d.compute_grads(vec![new_grad]) }
+
+        if let Some(d) = self.inputs[0].derivative.as_ref() {
+            d.compute_grads(vec![new_grad])
+        }
     }
 }
 
@@ -129,11 +130,10 @@ fn tanh_backward<T: Numeric + Real>(
     assert!(grads.len() == 1);
     assert!(inputs.len() == 1);
     let self_grads = tanh_derivative_outer(inputs);
-    if grads[0].shape().iter().product::<usize>() == 1 {
-        vec![&grads[0] * &self_grads[0]]
-    } else {
-        vec![grads[0].bmm(&self_grads[0])]
-    }
+    vec![RcTensor::from_raw(functional::element_wise_multiplication(
+        &grads[0],
+        &self_grads[0],
+    ))]
 }
 
 fn tanh_derivative_outer<T: Numeric + Real>(tensors: Vec<RcTensor<T>>) -> Vec<RcTensor<T>> {
@@ -189,46 +189,24 @@ fn test_tanh_sets_grad() {
     assert!(abs_diff.sum().elem() <= 2e-4);
 }
 
-#[ignore]
 #[test]
 fn test_multi_dimensional_tanh() {
     // TODO: get this to work with non-scalar inputs
     let input = RcTensor::from([[0.666, 12.0], [-3.2, -0.1]]);
-    let epsilon = 1e-12 as f64;
     let output = tanh(&tanh(&input)).sum();
-    let output_perturbed = tanh(&tanh(&(&input + &RcTensor::scalar(epsilon)))).sum();
-    println!(
-        "output_perturbed=
-    {output_perturbed:?}"
-    );
-    println!(
-        "output=
-    {output:?}"
-    );
-    println!("____={:?}\n\n", RcTensor::scalar(epsilon));
-    let numerical_derivative = &RcTensor::scalar(1.0 / epsilon) * &(&output_perturbed - &output);
+    let expected = RcTensor::from([[0.4792, 0.0000], [0.0028, 0.9803]]);
     output
         .derivative
         .clone()
         .unwrap()
         .compute_grads(vec![RcTensor::from([1.0 as f64])]);
     // let grad = output.derivative.clone().unwrap().compute();
-    dbg!(input.clone());
     let grad = input.get_grad().take().unwrap();
-    dbg!("input.get_grad()={:?}", input.get_grad().clone());
-    let abs_diff = (&numerical_derivative - &grad).abs();
-    println!(
-        "numerical_derivative=
-    {numerical_derivative:?}\n\n"
-    );
+    let abs_diff = (&expected - &grad).abs();
 
-    println!(
-        "grad=
-        {grad:?}\n\n"
-    );
-    println!("abs_diff.sum()={:?}", abs_diff.sum());
     assert!(abs_diff.sum().elem() <= 2e-4);
 }
+
 #[test]
 fn test_tanh_twice_sets_grad() {
     // TODO: get this to work with non-scalar inputs
