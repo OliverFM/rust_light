@@ -6,7 +6,7 @@ use std::convert::From;
 use std::ops::{Deref, Mul};
 
 use super::autograd::{self, Derivative};
-use super::functional as F;
+
 use super::numeric::*;
 use super::raw_tensor::*;
 use super::tensor_like::*;
@@ -133,7 +133,7 @@ where
         dbg!("setting grads:", self.clone(), grad_clone);
     }
 
-    fn dot<U, V>(&self, other: U) -> RcTensor<Self::Elem>
+    fn dot<U, V>(&self, _other: U) -> RcTensor<Self::Elem>
     where
         U: Deref<Target = V> + std::fmt::Debug + Clone,
         V: TensorLike<Elem = Self::Elem>,

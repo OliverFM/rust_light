@@ -1,4 +1,4 @@
-use super::functional as F;
+
 use super::numeric::*;
 use crate::tensor::{ElementIterator, RcTensor, Scalar, SliceRange, TensorLike, TensorLikePrivate};
 
@@ -66,7 +66,7 @@ where
     type SumType = Scalar<Self::Elem>;
     type GradType = RcTensor<T>;
 
-    fn dot<U, V>(&self, other: U) -> RcTensor<Self::Elem>
+    fn dot<U, V>(&self, _other: U) -> RcTensor<Self::Elem>
     where
         U: Deref<Target = V> + std::fmt::Debug + Clone,
         V: TensorLike<Elem = Self::Elem>,

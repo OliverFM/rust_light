@@ -1,9 +1,9 @@
 use super::numeric::*;
 use crate::tensor::functional;
-use crate::tensor::*;
+
 use crate::tensor::{ElementIterator, RawTensor, RcTensor, TensorLike};
 use num::traits::real::Real;
-use std::ops::Deref;
+
 use std::rc::Rc;
 
 #[derive(Debug, PartialEq, Clone)]
@@ -91,14 +91,13 @@ impl<T: Numeric> Derivative<T> {
         // f(g(h(x))) how do i set x.grad if we are now computing f'
         // grad = f'(g(hx)) g'(h(x)) h'(x)
         // f(g(h(x), z)) how do i set x.grad if we are now computing f'
-        let self_grads = (self.backward)(self.inputs.clone(), outer_grads.clone());
+        let self_grads = (self.backward)(self.inputs.clone(), outer_grads);
         let self_grad = self_grads[0].clone();
         self.inputs[0].set_grad(self_grad.clone());
         let new_grad = dbg!(self_grad);
-        self.inputs[0]
+        if let Some(d) = self.inputs[0]
             .derivative
-            .as_ref()
-            .map(|d| d.compute_grads(vec![new_grad]));
+            .as_ref() { d.compute_grads(vec![new_grad]) }
     }
 }
 
@@ -233,7 +232,7 @@ fn test_multi_dimensional_tanh() {
 #[test]
 fn test_tanh_twice_sets_grad() {
     // TODO: get this to work with non-scalar inputs
-    let input = RcTensor::from([[0.666, 12.0], [-3.2, -0.1]]);
+    let _input = RcTensor::from([[0.666, 12.0], [-3.2, -0.1]]);
     let input = RcTensor::from([0.666]);
     let epsilon = 1e-12 as f64;
     let output = tanh(&tanh(&input)).sum();

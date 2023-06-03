@@ -517,9 +517,9 @@ where
     }
 
     // dbg!("array={}, shape={},", &array, &left_shape_vec,);
-    let result = RawTensor::new(array, left_shape_vec);
+    
     // dbg!("result={:?}", &result);
-    result
+    RawTensor::new(array, left_shape_vec)
 }
 
 impl<T, U, V> Mul<U> for &RawTensor<T>
