@@ -71,7 +71,7 @@ where
         U: Deref<Target = V> + std::fmt::Debug + Clone,
         V: TensorLike<Elem = Self::Elem>,
     {
-        F::dot(self, other)
+        todo!()
     }
 
     fn shape(&self) -> Self::ShapeReturn<'_> {

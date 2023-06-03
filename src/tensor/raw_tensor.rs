@@ -359,7 +359,7 @@ where
         U: Deref<Target = V> + std::fmt::Debug + Clone,
         V: TensorLike<Elem = Self::Elem>,
     {
-        F::dot(self, other)
+        F::dot_no_derivative(self, other)
     }
 
     fn set_grad(&self, grad: Self::GradType) {
@@ -412,7 +412,11 @@ where
     fn add(self, right: &U) -> Self::Output {
         let mut raw_tensor = self.deref().add(right);
         // TODO: set derivative struct for right too
-        raw_tensor.derivative = Some(Derivative::new(vec![self.to_tensor()], autograd::ones));
+        raw_tensor.derivative = Some(Derivative::new(
+            vec![self.to_tensor()],
+            autograd::ones,
+            None,
+        ));
         RcTensor::from_raw(raw_tensor)
     }
 }
@@ -507,14 +511,14 @@ where
     assert!(left_shape_vec == right.shape().to_vec());
     let length = left.shape().iter().product();
     let mut array = Vec::with_capacity(length);
-    dbg!("left={}, right={},", left.clone(), right.clone());
+    // dbg!("left={}, right={},", left.clone(), right.clone());
     for (x, y) in ElementIterator::new(left).zip(ElementIterator::new(right)) {
         array.push(x * y);
     }
 
-    dbg!("array={}, shape={},", &array, &left_shape_vec,);
+    // dbg!("array={}, shape={},", &array, &left_shape_vec,);
     let result = RawTensor::new(array, left_shape_vec);
-    dbg!("result={:?}", &result);
+    // dbg!("result={:?}", &result);
     result
 }
 

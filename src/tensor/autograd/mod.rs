@@ -1,35 +1,53 @@
 use super::numeric::*;
+use crate::tensor::functional;
+use crate::tensor::*;
 use crate::tensor::{ElementIterator, RawTensor, RcTensor, TensorLike};
 use num::traits::real::Real;
+use std::ops::Deref;
+use std::rc::Rc;
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct Derivative<T: Numeric> {
+    // TODO: what happens if left and right are refering to the same underlying tensor?
+    // In that case is is not so clear how to assign gradients.
+    // e.g. d/dx(xy) = y, but d/dx(x^2) = 2x. Need to figure this one out.
+    // Even bigger issue: what if we have f(h(x), g(x))
     inputs: Vec<RcTensor<T>>,
     // TODO: remove the need to take ownership here
-    derivative: fn(Vec<RcTensor<T>>) -> RcTensor<T>,
+    derivative: fn(Vec<RcTensor<T>>) -> Vec<RcTensor<T>>,
+    backward: fn(Vec<RcTensor<T>>, Vec<RcTensor<T>>) -> Vec<RcTensor<T>>, // This is where we compute the gradient and update .grad
 }
 
-fn pass_through<T: Numeric>(tensors: Vec<RcTensor<T>>) -> RcTensor<T> {
-    tensors[0].clone()
+#[derive(Debug, PartialEq, Clone)]
+pub struct DerivativeConst<T: Numeric, const N: usize> {
+    // TODO: switch to using this
+    inputs: Box<[RcTensor<T>; N]>,
+    derivative: fn(Box<[RcTensor<T>; N]>) -> Box<[RcTensor<T>; N]>,
 }
 
-impl<T: Numeric> Default for Derivative<T> {
-    fn default() -> Self {
-        Derivative {
-            inputs: Vec::new(),
-            derivative: pass_through,
-        }
-    }
+pub(crate) enum DerivativeNode<T: Numeric> {
+    Leaf(Vec<RcTensor<T>>),
+    Internal(Vec<Rc<DerivativeNode<T>>>),
 }
 
-impl<T: Numeric> Derivative<T>
-// where RcTensor<T>: Mul<Output = RcTensor<T>>
-{
+pub(crate) struct DerivativeTree<T: Numeric, const N: usize> {
+    children: Option<[RcTensor<T>; N]>,
+}
+
+impl<T: Numeric> Derivative<T> {
     pub fn new(
         inputs: Vec<RcTensor<T>>,
-        derivative: fn(Vec<RcTensor<T>>) -> RcTensor<T>,
+        derivative: fn(Vec<RcTensor<T>>) -> Vec<RcTensor<T>>,
+        backward: Option<fn(Vec<RcTensor<T>>, Vec<RcTensor<T>>) -> Vec<RcTensor<T>>>,
     ) -> Derivative<T> {
-        Derivative { inputs, derivative }
+        Derivative {
+            inputs,
+            derivative,
+            backward: match backward {
+                Some(f) => f,
+                None => functional::todo_backward,
+            },
+        }
     }
     pub(crate) fn pass_grad_back(&self, grad: RcTensor<T>) {
         self.inputs[0].set_grad(grad.clone());
@@ -40,34 +58,54 @@ impl<T: Numeric> Derivative<T>
     }
 
     pub fn compute(&self) -> RcTensor<T> {
+        //
         // TODO: add chain rule in
         assert!(self.inputs.len() <= 1);
-
         // f(g(h(x))) how do i set x.grad if we are now computing f'
         // grad = f'(g(hx)) g'(h(x)) h'(x)
         // f(g(h(x), z)) how do i set x.grad if we are now computing f'
-        let grad = if let Some(grad) = self.inputs[0].compute_grad() {
-            let self_grad = (self.derivative)(self.inputs.clone());
+        let grad = if let Some(grads) = self.inputs[0].compute_grad() {
+            let input_grad: RcTensor<T> = grads;
+            let self_grad: RcTensor<T> = (self.derivative)(self.inputs.clone())[0].clone();
             // TODO: consider moving this logic into a generalised_mul function.
             if self_grad.is_scalar() || self_grad.shape().iter().product::<usize>() == 1 {
-                assert!(grad.is_scalar() || grad.shape().iter().product::<usize>() == 1);
-                self_grad * grad
+                assert!(
+                    input_grad.is_scalar() || input_grad.shape().iter().product::<usize>() == 1
+                );
+                self_grad * input_grad
             } else {
-                self_grad.bmm(&grad)
+                self_grad.bmm(&input_grad)
             }
         } else {
-            (self.derivative)(self.inputs.clone())
+            (self.derivative)(self.inputs.clone())[0].clone()
         };
         println!("grad={:?}", &grad);
         self.pass_grad_back(grad.clone());
         grad
     }
+
+    pub fn compute_grads(&self, outer_grads: Vec<RcTensor<T>>) {
+        assert!(self.inputs.len() == 1);
+        assert!(outer_grads.len() == 1);
+
+        // f(g(h(x))) how do i set x.grad if we are now computing f'
+        // grad = f'(g(hx)) g'(h(x)) h'(x)
+        // f(g(h(x), z)) how do i set x.grad if we are now computing f'
+        let self_grads = (self.backward)(self.inputs.clone(), outer_grads.clone());
+        let self_grad = self_grads[0].clone();
+        self.inputs[0].set_grad(self_grad.clone());
+        let new_grad = dbg!(self_grad);
+        self.inputs[0]
+            .derivative
+            .as_ref()
+            .map(|d| d.compute_grads(vec![new_grad]));
+    }
 }
 
-pub fn ones<T: Numeric>(tensors: Vec<RcTensor<T>>) -> RcTensor<T> {
+pub fn ones<T: Numeric>(tensors: Vec<RcTensor<T>>) -> Vec<RcTensor<T>> {
     assert!(tensors.len() == 1);
     let raw_tensor = RawTensor::new_with_filler(tensors[0].shape().to_vec(), T::one());
-    RcTensor::from_raw(raw_tensor)
+    vec![RcTensor::from_raw(raw_tensor)]
 }
 
 pub fn tanh<T: Numeric + Real>(tensor: &RcTensor<T>) -> RcTensor<T> {
@@ -77,12 +115,31 @@ pub fn tanh<T: Numeric + Real>(tensor: &RcTensor<T>) -> RcTensor<T> {
         array.push(elem.tanh());
     }
     let mut raw_tensor = RawTensor::new(array, tensor.shape().clone());
-    raw_tensor.derivative = Some(Derivative::new(vec![tensor.clone()], tanh_derivative_outer));
+    raw_tensor.derivative = Some(Derivative::new(
+        vec![tensor.clone()],
+        tanh_derivative_outer,
+        Some(tanh_backward),
+    ));
     RcTensor::from_raw(raw_tensor)
 }
 
-fn tanh_derivative_outer<T: Numeric + Real>(tensors: Vec<RcTensor<T>>) -> RcTensor<T> {
-    tanh_derivative(&tensors[0])
+fn tanh_backward<T: Numeric + Real>(
+    inputs: Vec<RcTensor<T>>,
+    grads: Vec<RcTensor<T>>,
+) -> Vec<RcTensor<T>> {
+    assert!(grads.len() == 1);
+    assert!(inputs.len() == 1);
+    let self_grads = tanh_derivative_outer(inputs);
+    if grads[0].shape().iter().product::<usize>() == 1 {
+        vec![&grads[0] * &self_grads[0]]
+    } else {
+        vec![grads[0].bmm(&self_grads[0])]
+    }
+}
+
+fn tanh_derivative_outer<T: Numeric + Real>(tensors: Vec<RcTensor<T>>) -> Vec<RcTensor<T>> {
+    assert!(tensors.len() == 1);
+    vec![tanh_derivative(&tensors[0])]
 }
 
 fn tanh_derivative<T: Numeric + Real>(tensor: &RcTensor<T>) -> RcTensor<T> {
@@ -90,15 +147,93 @@ fn tanh_derivative<T: Numeric + Real>(tensor: &RcTensor<T>) -> RcTensor<T> {
     let mut array = Vec::with_capacity(length);
     for elem in ElementIterator::new(tensor) {
         let v = T::one() - elem.tanh().powi(2);
-        // println!("tanh^-1({elem:?})={v:?}");
         array.push(v);
     }
-    // RcTensor::new(array, tensor.shape().clone())
     RcTensor::new(array, tensor.shape().clone())
 }
 
 #[test]
+fn test_tanh_sets_grad() {
+    let input = RcTensor::from([0.666]);
+    let epsilon = 1e-12 as f64;
+    let output = tanh(&input).sum();
+    let output_perturbed = tanh(&(&input + &RcTensor::scalar(epsilon))).sum();
+    println!(
+        "output_perturbed=
+    {output_perturbed:?}"
+    );
+    println!(
+        "output=
+    {output:?}"
+    );
+    println!("____={:?}\n\n", RcTensor::scalar(epsilon));
+    let numerical_derivative = &RcTensor::scalar(1.0 / epsilon) * &(&output_perturbed - &output);
+    output
+        .derivative
+        .clone()
+        .unwrap()
+        .compute_grads(vec![RcTensor::from([1.0 as f64])]);
+    let input = dbg!(input);
+    let grad = input.get_grad().take().unwrap();
+    dbg!("input.get_grad()={:?}", input.get_grad().clone());
+    let abs_diff = (&numerical_derivative - &grad).abs();
+    println!(
+        "numerical_derivative=
+    {numerical_derivative:?}\n\n"
+    );
+
+    println!(
+        "grad=
+        {grad:?}\n\n"
+    );
+    println!("abs_diff.sum()={:?}", abs_diff.sum());
+    assert!(abs_diff.sum().elem() <= 2e-4);
+}
+
+#[ignore]
+#[test]
+fn test_multi_dimensional_tanh() {
+    // TODO: get this to work with non-scalar inputs
+    let input = RcTensor::from([[0.666, 12.0], [-3.2, -0.1]]);
+    let epsilon = 1e-12 as f64;
+    let output = tanh(&tanh(&input)).sum();
+    let output_perturbed = tanh(&tanh(&(&input + &RcTensor::scalar(epsilon)))).sum();
+    println!(
+        "output_perturbed=
+    {output_perturbed:?}"
+    );
+    println!(
+        "output=
+    {output:?}"
+    );
+    println!("____={:?}\n\n", RcTensor::scalar(epsilon));
+    let numerical_derivative = &RcTensor::scalar(1.0 / epsilon) * &(&output_perturbed - &output);
+    output
+        .derivative
+        .clone()
+        .unwrap()
+        .compute_grads(vec![RcTensor::from([1.0 as f64])]);
+    // let grad = output.derivative.clone().unwrap().compute();
+    dbg!(input.clone());
+    let grad = input.get_grad().take().unwrap();
+    dbg!("input.get_grad()={:?}", input.get_grad().clone());
+    let abs_diff = (&numerical_derivative - &grad).abs();
+    println!(
+        "numerical_derivative=
+    {numerical_derivative:?}\n\n"
+    );
+
+    println!(
+        "grad=
+        {grad:?}\n\n"
+    );
+    println!("abs_diff.sum()={:?}", abs_diff.sum());
+    assert!(abs_diff.sum().elem() <= 2e-4);
+}
+#[test]
 fn test_tanh_twice_sets_grad() {
+    // TODO: get this to work with non-scalar inputs
+    let input = RcTensor::from([[0.666, 12.0], [-3.2, -0.1]]);
     let input = RcTensor::from([0.666]);
     let epsilon = 1e-12 as f64;
     let output = tanh(&tanh(&input)).sum();
@@ -113,9 +248,15 @@ fn test_tanh_twice_sets_grad() {
     );
     println!("____={:?}\n\n", RcTensor::scalar(epsilon));
     let numerical_derivative = &RcTensor::scalar(1.0 / epsilon) * &(&output_perturbed - &output);
-    output.derivative.clone().unwrap().compute();
+    output
+        .derivative
+        .clone()
+        .unwrap()
+        .compute_grads(vec![RcTensor::from([1.0 as f64])]);
+    // let grad = output.derivative.clone().unwrap().compute();
+    dbg!(input.clone());
     let grad = input.get_grad().take().unwrap();
-    println!("input.get_grad()={:?}", input.get_grad());
+    dbg!("input.get_grad()={:?}", input.get_grad().clone());
     let abs_diff = (&numerical_derivative - &grad).abs();
     println!(
         "numerical_derivative=

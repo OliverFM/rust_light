@@ -1,5 +1,3 @@
-
-
 use super::numeric::*;
 use super::utils::IndexIterator;
 use super::{RawTensor, RcTensor, SliceRange, TensorView};
@@ -121,6 +119,7 @@ pub trait TensorLike: TensorLikePrivate + std::fmt::Debug {
         U: TensorLike<Elem = Self::Elem>,
     {
         // assert!(2 <= self.shape().len() && self.shape().len() <= 3); // For now we can only do Batch matrix
+        dbg!(self.shape().to_vec());
         assert!(2 <= self.shape().len()); // For now we can only do Batch matrix
         assert!(right.shape().len() == 2); // rhs must be a matrix
         assert!(self.shape()[self.shape().len() - 1] == right.shape()[right.shape().len() - 2]);
@@ -194,11 +193,4 @@ pub trait TensorLike: TensorLikePrivate + std::fmt::Debug {
     fn iter_indices(&self) -> IndexIterator {
         IndexIterator::new(self.shape().clone())
     }
-}
-
-#[test]
-fn test_dot() {
-    let v = vec![0, 1, 2];
-    let vec = RcTensor::new(v, vec![3]);
-    assert_eq!(vec.dot(&vec), RcTensor::new(vec![5], vec![1]));
 }

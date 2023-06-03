@@ -1,10 +1,16 @@
 use super::super::numeric::*;
-use crate::tensor::autograd::{Derivative};
+use crate::tensor::autograd::Derivative;
 
 use crate::tensor::{RawTensor, RcTensor, TensorLike};
 use std::ops::Deref;
 
-pub(crate) fn todo_deriv<T: Numeric>(_inputs: Vec<RcTensor<T>>) -> RcTensor<T> {
+pub(crate) fn todo_backward<T: Numeric>(
+    _inputs: Vec<RcTensor<T>>,
+    _grads: Vec<RcTensor<T>>,
+) -> Vec<RcTensor<T>> {
+    todo!()
+}
+pub(crate) fn todo_deriv<T: Numeric>(_inputs: Vec<RcTensor<T>>) -> Vec<RcTensor<T>> {
     todo!()
 }
 
@@ -25,15 +31,11 @@ where
     RawTensor {
         array: vec![result],
         shape: vec![1],
-        derivative: Some(Derivative::new(
-            vec![left.to_tensor(), right.to_tensor()],
-            todo_deriv,
-        )),
         ..Default::default()
     }
 }
 
-pub fn dot<T, U1, U2, V1, V2>(left: U1, right: U2) -> RcTensor<T>
+pub fn dot_no_derivative<T, U1, U2, V1, V2>(left: U1, right: U2) -> RcTensor<T>
 where
     T: Numeric,
     U1: Deref<Target = V1> + std::fmt::Debug + Clone,
@@ -42,4 +44,26 @@ where
     V2: TensorLike<Elem = T>,
 {
     RcTensor::from_raw(dot_raw(left, right))
+}
+
+// TODO: generalise this to views
+pub fn dot<T>(left: &RcTensor<T>, right: &RcTensor<T>) -> RcTensor<T>
+where
+    T: Numeric,
+{
+    let mut raw_tensor = dot_raw(left, right);
+    raw_tensor.derivative = Some(Derivative::new(
+        vec![left.clone(), right.clone()],
+        todo_deriv,
+        None,
+    ));
+
+    RcTensor::from_raw(raw_tensor)
+}
+
+#[test]
+fn test_dot() {
+    let v = vec![0, 1, 2];
+    let vec = RcTensor::new(v, vec![3]);
+    assert_eq!(dot(&vec, &vec), RcTensor::new(vec![5], vec![1]));
 }
