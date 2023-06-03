@@ -34,6 +34,7 @@ pub(crate) struct DerivativeTree<T: Numeric, const N: usize> {
     children: Option<[RcTensor<T>; N]>,
 }
 
+
 impl<T: Numeric> Derivative<T> {
     pub fn new(
         inputs: Vec<RcTensor<T>>,
@@ -95,9 +96,11 @@ impl<T: Numeric> Derivative<T> {
         let self_grad = self_grads[0].clone();
         self.inputs[0].set_grad(self_grad.clone());
         let new_grad = dbg!(self_grad);
-        if let Some(d) = self.inputs[0].derivative.as_ref() {
-            d.compute_grads(vec![new_grad])
-        }
+
+        if let Some(d) = self.inputs[0]
+            .derivative
+            .as_ref() { d.compute_grads(vec![new_grad]) }
+
     }
 }
 
@@ -133,6 +136,7 @@ fn tanh_backward<T: Numeric + Real>(
         &grads[0],
         &self_grads[0],
     ))]
+
 }
 
 fn tanh_derivative_outer<T: Numeric + Real>(tensors: Vec<RcTensor<T>>) -> Vec<RcTensor<T>> {
@@ -187,6 +191,7 @@ fn test_tanh_sets_grad() {
     println!("abs_diff.sum()={:?}", abs_diff.sum());
     assert!(abs_diff.sum().elem() <= 2e-4);
 }
+
 
 #[test]
 fn test_multi_dimensional_tanh() {

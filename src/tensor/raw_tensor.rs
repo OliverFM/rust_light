@@ -500,6 +500,7 @@ where
     }
 }
 
+
 impl<T, U, V> Mul<U> for &RawTensor<T>
 where
     T: Numeric,
