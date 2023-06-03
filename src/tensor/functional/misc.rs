@@ -1,5 +1,6 @@
 use super::super::numeric::*;
 use crate::tensor::autograd::Derivative;
+use crate::tensor::utils::ElementIterator;
 
 use crate::tensor::{RawTensor, RcTensor, TensorLike};
 use std::ops::Deref;
@@ -35,6 +36,28 @@ where
     }
 }
 
+pub fn element_wise_multiplication<T, U1, V1, U2, V2>(left: U1, right: U2) -> RawTensor<T>
+where
+    T: Numeric,
+    U1: Deref<Target = V1> + std::fmt::Debug + Clone,
+    V1: TensorLike<Elem = T>,
+    U2: Deref<Target = V2> + Clone + std::fmt::Debug,
+    V2: TensorLike<Elem = T>,
+{
+    let left_shape_vec = left.shape().to_vec();
+    assert!(left_shape_vec == right.shape().to_vec());
+    let length = left.shape().iter().product();
+    let mut array = Vec::with_capacity(length);
+    // dbg!("left={}, right={},", left.clone(), right.clone());
+    for (x, y) in ElementIterator::new(left).zip(ElementIterator::new(right)) {
+        array.push(x * y);
+    }
+
+    // dbg!("array={}, shape={},", &array, &left_shape_vec,);
+
+    // dbg!("result={:?}", &result);
+    RawTensor::new(array, left_shape_vec)
+}
 pub fn dot_no_derivative<T, U1, U2, V1, V2>(left: U1, right: U2) -> RcTensor<T>
 where
     T: Numeric,

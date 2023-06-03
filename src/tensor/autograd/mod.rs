@@ -95,9 +95,9 @@ impl<T: Numeric> Derivative<T> {
         let self_grad = self_grads[0].clone();
         self.inputs[0].set_grad(self_grad.clone());
         let new_grad = dbg!(self_grad);
-        if let Some(d) = self.inputs[0]
-            .derivative
-            .as_ref() { d.compute_grads(vec![new_grad]) }
+        if let Some(d) = self.inputs[0].derivative.as_ref() {
+            d.compute_grads(vec![new_grad])
+        }
     }
 }
 
@@ -129,11 +129,10 @@ fn tanh_backward<T: Numeric + Real>(
     assert!(grads.len() == 1);
     assert!(inputs.len() == 1);
     let self_grads = tanh_derivative_outer(inputs);
-    if grads[0].shape().iter().product::<usize>() == 1 {
-        vec![&grads[0] * &self_grads[0]]
-    } else {
-        vec![grads[0].bmm(&self_grads[0])]
-    }
+    vec![RcTensor::from_raw(functional::element_wise_multiplication(
+        &grads[0],
+        &self_grads[0],
+    ))]
 }
 
 fn tanh_derivative_outer<T: Numeric + Real>(tensors: Vec<RcTensor<T>>) -> Vec<RcTensor<T>> {
@@ -189,7 +188,6 @@ fn test_tanh_sets_grad() {
     assert!(abs_diff.sum().elem() <= 2e-4);
 }
 
-#[ignore]
 #[test]
 fn test_multi_dimensional_tanh() {
     // TODO: get this to work with non-scalar inputs
