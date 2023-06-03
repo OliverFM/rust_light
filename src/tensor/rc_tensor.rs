@@ -5,17 +5,17 @@ use std::cmp::PartialEq;
 use std::convert::From;
 use std::ops::{Deref, Mul};
 
-use super::autograd::Derivative;
-use super::functional as F;
+use super::autograd::{self, Derivative};
+
 use super::numeric::*;
 use super::raw_tensor::*;
 use super::tensor_like::*;
 use super::tensor_view::*;
 
-fn ones<T: Numeric>(tensors: Vec<RcTensor<T>>) -> RcTensor<T> {
-    assert_eq!(tensors.len(), 1);
-    RcTensor::new_with_filler(tensors[0].shape().to_vec(), T::one())
-}
+// fn ones<T: Numeric>(tensors: Vec<RcTensor<T>>) -> RcTensor<T> {
+//     assert_eq!(tensors.len(), 1);
+//     RcTensor::new_with_filler(tensors[0].shape().to_vec(), T::one())
+// }
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct RcTensor<T: Numeric>(pub(super) Rc<RawTensor<T>>);
@@ -105,6 +105,16 @@ impl<T: Numeric> RcTensor<T> {
     }
 }
 
+fn sum_backward<T: Numeric>(inputs: Vec<RcTensor<T>>, grads: Vec<RcTensor<T>>) -> Vec<RcTensor<T>> {
+    assert_eq!(inputs.len(), 1);
+    assert_eq!(grads.len(), 1);
+    assert_eq!(grads[0].0.array.len(), 1);
+    vec![RcTensor::new_with_filler(
+        inputs[0].shape().to_vec(),
+        *grads[0].get_first_elem(),
+    )]
+}
+
 impl<T> TensorLikePrivate for RcTensor<T> where T: Numeric {}
 impl<T> TensorLike for RcTensor<T>
 where
@@ -118,15 +128,17 @@ where
     type GradType = RcTensor<T>;
 
     fn set_grad(&self, grad: Self::GradType) {
+        let grad_clone = grad.clone();
         *self.grad.borrow_mut() = Some(grad);
+        dbg!("setting grads:", self.clone(), grad_clone);
     }
 
-    fn dot<U, V>(&self, other: U) -> RcTensor<Self::Elem>
+    fn dot<U, V>(&self, _other: U) -> RcTensor<Self::Elem>
     where
         U: Deref<Target = V> + std::fmt::Debug + Clone,
         V: TensorLike<Elem = Self::Elem>,
     {
-        F::dot(self, other)
+        todo!()
     }
 
     fn shape(&self) -> Self::ShapeReturn<'_> {
@@ -139,7 +151,11 @@ where
 
     fn sum(&self) -> Self::SumType {
         let mut raw_scalar = self.0.sum();
-        raw_scalar.derivative = Some(Derivative::new(vec![self.clone()], ones));
+        raw_scalar.derivative = Some(Derivative::new(
+            vec![self.clone()],
+            autograd::ones,
+            Some(sum_backward),
+        ));
         Scalar::from_raw(raw_scalar)
     }
 
