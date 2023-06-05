@@ -35,6 +35,17 @@ where
 }
 
 impl<T: Numeric> RcTensor<T> {
+    pub fn backward(&self) {
+        assert_eq!(
+            self.0.array.len(),
+            1,
+            "Can only operate on tensors with exactly one element!"
+        );
+        self.derivative
+            .as_ref()
+            .unwrap()
+            .compute_jvp(vec![RcTensor::scalar(T::one())])
+    }
     pub fn is_scalar(&self) -> bool {
         self.0.array.len() == 1 && self.0.shape.is_empty()
     }
@@ -43,13 +54,13 @@ impl<T: Numeric> RcTensor<T> {
         RcTensor(Rc::new(raw_tensor))
     }
 
-    pub(super) fn compute_grad(&self) -> Option<Self> {
-        // TODO: don't just unwrap, switch to a Result type and deal with the case of no gradient
-        // appropriately
-        self.derivative
-            .as_ref()
-            .map(|derivative| derivative.compute())
-    }
+    // pub(super) fn compute_grad(&self) -> Option<Self> {
+    //     // TODO: don't just unwrap, switch to a Result type and deal with the case of no gradient
+    //     // appropriately
+    //     self.derivative
+    //         .as_ref()
+    //         .map(|derivative| derivative.compute())
+    // }
 
     pub(in crate::tensor) fn new_empty(shape: Vec<usize>) -> RcTensor<T> {
         let raw_tensor = RawTensor::new_empty(shape);
@@ -105,13 +116,6 @@ impl<T: Numeric> RcTensor<T> {
     }
 }
 
-fn sum_backward<T: Numeric>(inputs: Vec<RcTensor<T>>, grads: Vec<RcTensor<T>>) -> Vec<RcTensor<T>> {
-    assert_eq!(inputs.len(), 1);
-    assert_eq!(grads.len(), 1);
-    assert_eq!(grads[0].0.array.len(), 1);
-    vec![RcTensor::from([*grads[0].get_first_elem()])]
-}
-
 impl<T> TensorLikePrivate for RcTensor<T> where T: Numeric {}
 impl<T> TensorLike for RcTensor<T>
 where
@@ -148,11 +152,7 @@ where
 
     fn sum(&self) -> Self::SumType {
         let mut raw_scalar = self.0.sum();
-        raw_scalar.derivative = Some(Derivative::new(
-            vec![self.clone()],
-            autograd::ones,
-            Some(sum_backward),
-        ));
+        raw_scalar.derivative = Some(Derivative::new(vec![self.clone()], autograd::ones));
         Scalar::from_raw(raw_scalar)
     }
 

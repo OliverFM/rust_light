@@ -75,7 +75,6 @@ where
     raw_tensor.derivative = Some(Derivative::new(
         vec![left.clone(), right.clone()],
         todo_deriv,
-        None,
     ));
 
     RcTensor::from_raw(raw_tensor)
