@@ -413,11 +413,7 @@ where
     fn add(self, right: &U) -> Self::Output {
         let mut raw_tensor = self.deref().add(right);
         // TODO: set derivative struct for right too
-        raw_tensor.derivative = Some(Derivative::new(
-            vec![self.to_tensor()],
-            autograd::ones,
-            None,
-        ));
+        raw_tensor.derivative = Some(Derivative::new(vec![self.to_tensor()], autograd::ones));
         RcTensor::from_raw(raw_tensor)
     }
 }
@@ -499,7 +495,6 @@ where
         result
     }
 }
-
 
 impl<T, U, V> Mul<U> for &RawTensor<T>
 where

@@ -2,7 +2,6 @@ use super::super::numeric::*;
 use crate::tensor::autograd::Derivative;
 use crate::tensor::utils::ElementIterator;
 
-
 use crate::tensor::{RawTensor, RcTensor, TensorLike};
 use std::ops::Deref;
 
@@ -12,7 +11,10 @@ pub(crate) fn todo_backward<T: Numeric>(
 ) -> Vec<RcTensor<T>> {
     todo!()
 }
-pub(crate) fn todo_deriv<T: Numeric>(_inputs: Vec<RcTensor<T>>) -> Vec<RcTensor<T>> {
+pub(crate) fn todo_deriv<T: Numeric>(
+    _inputs: Vec<RcTensor<T>>,
+    _: Vec<RcTensor<T>>,
+) -> Vec<RcTensor<T>> {
     todo!()
 }
 
@@ -36,7 +38,6 @@ where
         ..Default::default()
     }
 }
-
 
 pub fn element_wise_multiplication<T, U1, V1, U2, V2>(left: U1, right: U2) -> RawTensor<T>
 where
@@ -77,7 +78,6 @@ where
     raw_tensor.derivative = Some(Derivative::new(
         vec![left.clone(), right.clone()],
         todo_deriv,
-        None,
     ));
 
     RcTensor::from_raw(raw_tensor)

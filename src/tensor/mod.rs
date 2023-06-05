@@ -7,8 +7,6 @@ mod tensor_like;
 mod tensor_view;
 mod utils;
 
-pub use autograd::Derivative;
-// pub use functional;
 pub use numeric::*;
 pub use raw_tensor::*;
 pub use rc_tensor::*;

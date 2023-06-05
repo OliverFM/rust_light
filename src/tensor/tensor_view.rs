@@ -1,9 +1,15 @@
-
 use super::numeric::*;
 use crate::tensor::{ElementIterator, RcTensor, Scalar, SliceRange, TensorLike, TensorLikePrivate};
 
 use std::cmp::PartialEq;
 use std::ops::{Deref, Index};
+use std::rc::Rc;
+
+#[derive(Debug, Clone)]
+pub struct View {
+    shape: Vec<usize>,
+    offset: Vec<SliceRange>,
+}
 
 #[derive(Debug, Clone)]
 pub struct TensorView<T>
@@ -13,9 +19,9 @@ where
     // TODO: convert this to look at slices of tensors. e.g. tensor[..1]
     // tensor: &'a Tensor<T>,
     tensor: RcTensor<T>,
-    shape: Vec<usize>,
-    offset: Vec<SliceRange>,
+    view: Rc<View>,
 }
+
 impl<T> Index<&Vec<usize>> for TensorView<T>
 where
     T: Numeric,
@@ -23,7 +29,9 @@ where
     type Output = T;
 
     fn index(&self, index: &Vec<usize>) -> &Self::Output {
-        self.tensor.get_with_offset(index, &self.offset).unwrap()
+        self.tensor
+            .get_with_offset(index, &self.view.offset)
+            .unwrap()
     }
 }
 
@@ -43,14 +51,28 @@ where
         }
         TensorView {
             tensor,
-            offset,
-            shape, // TODO: fix this
+            view: View {
+                offset,
+                shape, // TODO: fix this
+            }
+            .into(),
         }
     }
-    // pub fn to_tensor(&self) -> RcTensor<T> {
-    //     // self.tensor.clone()
-    //     todo!()
-    // }
+
+    pub fn reshape(&self, shape: Vec<usize>) -> Self {
+        assert_eq!(
+            self.view.shape.iter().product::<usize>(),
+            shape.iter().product::<usize>()
+        );
+        TensorView {
+            tensor: self.tensor.clone(),
+            view: View {
+                shape,
+                offset: self.view.offset.clone(),
+            }
+            .into(),
+        }
+    }
 }
 
 impl<T> TensorLikePrivate for TensorView<T> where T: Numeric {}
@@ -75,7 +97,7 @@ where
     }
 
     fn shape(&self) -> Self::ShapeReturn<'_> {
-        &self.shape
+        &self.view.shape
     }
 
     fn tensor(&self) -> Self::TensorRef<'_> {
@@ -84,8 +106,11 @@ where
     }
 
     fn to_tensor(&self) -> RcTensor<T> {
-        todo!();
-        // let mut tensor = Tensor::new_empty(self.shape);
+        let mut array = Vec::with_capacity(self.view.shape.iter().product());
+        for elem in ElementIterator::new(self) {
+            array.push(elem);
+        }
+        RcTensor::new(array, self.view.shape.clone())
     }
 
     fn sum(&self) -> Scalar<Self::Elem> {
@@ -98,7 +123,7 @@ where
     fn get(&self, index: &Vec<usize>) -> Result<&T, String> {
         let idx = self
             .tensor
-            .get_global_index(index, Some(&self.offset))
+            .get_global_index(index, Some(&self.view.offset))
             .unwrap();
         Ok(&self.tensor.array[idx])
     }
@@ -120,7 +145,7 @@ where
     V: TensorLike<Elem = T>,
 {
     fn eq(&self, other: &V) -> bool {
-        if *other.shape() != self.shape {
+        if *other.shape() != self.view.shape {
             return false;
         }
 
