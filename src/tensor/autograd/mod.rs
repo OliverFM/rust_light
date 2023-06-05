@@ -71,7 +71,7 @@ impl<T: Numeric> Derivative<T> {
         // f(g(h(x))) how do i set x.grad if we are now computing f'
         // grad = f'(g(hx)) g'(h(x)) h'(x)
         // f(g(h(x), z)) how do i set x.grad if we are now computing f'
-        let self_grads = (self.jacobian_vector_product)(self.inputs.clone(), outer_grads.clone());
+        let self_grads = (self.jacobian_vector_product)(self.inputs.clone(), outer_grads);
         let grad = self_grads[0].clone();
         let shaped_grad = RcTensor::new(grad.0.array.clone(), self.inputs[0].shape().to_vec());
         self.inputs[0].set_grad(shaped_grad);
