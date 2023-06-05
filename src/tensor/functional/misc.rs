@@ -2,7 +2,6 @@ use super::super::numeric::*;
 use crate::tensor::autograd::Derivative;
 use crate::tensor::utils::ElementIterator;
 
-
 use crate::tensor::{RawTensor, RcTensor, TensorLike};
 use std::ops::Deref;
 
@@ -36,7 +35,6 @@ where
         ..Default::default()
     }
 }
-
 
 pub fn element_wise_multiplication<T, U1, V1, U2, V2>(left: U1, right: U2) -> RawTensor<T>
 where

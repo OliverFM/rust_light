@@ -109,10 +109,7 @@ fn sum_backward<T: Numeric>(inputs: Vec<RcTensor<T>>, grads: Vec<RcTensor<T>>) -
     assert_eq!(inputs.len(), 1);
     assert_eq!(grads.len(), 1);
     assert_eq!(grads[0].0.array.len(), 1);
-    vec![RcTensor::new_with_filler(
-        inputs[0].shape().to_vec(),
-        *grads[0].get_first_elem(),
-    )]
+    vec![RcTensor::from([*grads[0].get_first_elem()])]
 }
 
 impl<T> TensorLikePrivate for RcTensor<T> where T: Numeric {}

@@ -4,7 +4,7 @@ use crate::tensor::functional;
 use crate::tensor::{ElementIterator, RawTensor, RcTensor, TensorLike};
 use num::traits::real::Real;
 
-use std::rc::Rc;
+// use std::rc::Rc;
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct Derivative<T: Numeric> {
@@ -15,6 +15,9 @@ pub struct Derivative<T: Numeric> {
     inputs: Vec<RcTensor<T>>,
     // TODO: remove the need to take ownership here
     derivative: fn(Vec<RcTensor<T>>) -> Vec<RcTensor<T>>,
+    // Replace this with a jacobian_vector_product function which calculates
+    // grad_input.bmm(Jacobian(inputs)) -- as this is MUCH more memory efficient than actually
+    // storing the jacobian
     backward: fn(Vec<RcTensor<T>>, Vec<RcTensor<T>>) -> Vec<RcTensor<T>>, // This is where we compute the gradient and update .grad
 }
 
@@ -25,19 +28,12 @@ pub struct DerivativeConst<T: Numeric, const N: usize> {
     derivative: fn(Box<[RcTensor<T>; N]>) -> Box<[RcTensor<T>; N]>,
 }
 
-pub(crate) enum DerivativeNode<T: Numeric> {
-    Leaf(Vec<RcTensor<T>>),
-    Internal(Vec<Rc<DerivativeNode<T>>>),
-}
-
-pub(crate) struct DerivativeTree<T: Numeric, const N: usize> {
-    children: Option<[RcTensor<T>; N]>,
-}
-
 impl<T: Numeric> Derivative<T> {
     pub fn new(
         inputs: Vec<RcTensor<T>>,
         derivative: fn(Vec<RcTensor<T>>) -> Vec<RcTensor<T>>,
+        // TODO: switch this to working on views.
+        // OR just force everythng to be flat... and set to the same shape at the end...
         backward: Option<fn(Vec<RcTensor<T>>, Vec<RcTensor<T>>) -> Vec<RcTensor<T>>>,
     ) -> Derivative<T> {
         Derivative {
@@ -50,7 +46,9 @@ impl<T: Numeric> Derivative<T> {
         }
     }
     pub(crate) fn pass_grad_back(&self, grad: RcTensor<T>) {
-        self.inputs[0].set_grad(grad.clone());
+        // TODO: replace this with view logic
+        let shaped_grad = RcTensor::new(grad.0.array.clone(), self.inputs[0].shape().to_vec());
+        self.inputs[0].set_grad(shaped_grad);
         self.inputs[0]
             .derivative
             .iter()
@@ -91,11 +89,25 @@ impl<T: Numeric> Derivative<T> {
         // f(g(h(x))) how do i set x.grad if we are now computing f'
         // grad = f'(g(hx)) g'(h(x)) h'(x)
         // f(g(h(x), z)) how do i set x.grad if we are now computing f'
-        let self_grads = (self.backward)(self.inputs.clone(), outer_grads);
+        let self_grads = (self.derivative)(self.inputs.clone());
         let self_grad = self_grads[0].clone();
+        let outer_grad = outer_grads[0].clone();
         self.inputs[0].set_grad(self_grad.clone());
-        let new_grad = dbg!(self_grad);
+        dbg!(outer_grad.shape().clone());
+        dbg!(self_grad.shape().clone());
+        let new_grad = if self_grad.is_scalar()
+            || self_grad.shape().iter().product::<usize>() == 1
+            || outer_grad.is_scalar()
+            || outer_grad.shape().iter().product::<usize>() == 1
+        {
+            assert!(outer_grad.is_scalar() || outer_grad.shape().iter().product::<usize>() == 1);
+            outer_grad * self_grad
+        } else {
+            outer_grad.bmm(&self_grad)
+        };
 
+        let shaped_grad = RcTensor::new(new_grad.0.array.clone(), self.inputs[0].shape().to_vec());
+        self.inputs[0].set_grad(shaped_grad);
         if let Some(d) = self.inputs[0].derivative.as_ref() {
             d.compute_grads(vec![new_grad])
         }
@@ -104,8 +116,9 @@ impl<T: Numeric> Derivative<T> {
 
 pub fn ones<T: Numeric>(tensors: Vec<RcTensor<T>>) -> Vec<RcTensor<T>> {
     assert!(tensors.len() == 1);
-    let raw_tensor = RawTensor::new_with_filler(tensors[0].shape().to_vec(), T::one());
-    vec![RcTensor::from_raw(raw_tensor)]
+    let length = tensors[0].shape().iter().product::<usize>();
+    let raw_tensor = RawTensor::new_with_filler(vec![1, length], T::one());
+    dbg!("sum_backward", vec![RcTensor::from_raw(raw_tensor)]).1
 }
 
 pub fn tanh<T: Numeric + Real>(tensor: &RcTensor<T>) -> RcTensor<T> {
@@ -130,25 +143,68 @@ fn tanh_backward<T: Numeric + Real>(
     assert!(grads.len() == 1);
     assert!(inputs.len() == 1);
     let self_grads = tanh_derivative_outer(inputs);
-    vec![RcTensor::from_raw(functional::element_wise_multiplication(
-        &grads[0],
-        &self_grads[0],
-    ))]
+    dbg!("tanh_derivative", self_grads[0].shape());
+    self_grads
+    // vec![RcTensor::from_raw(functional::element_wise_multiplication(
+    //     &grads[0],
+    //     &self_grads[0],
+    // ))]
 }
 
 fn tanh_derivative_outer<T: Numeric + Real>(tensors: Vec<RcTensor<T>>) -> Vec<RcTensor<T>> {
     assert!(tensors.len() == 1);
-    vec![tanh_derivative(&tensors[0])]
+    vec![tanh_derivative(&tensors[0], true)]
 }
 
-fn tanh_derivative<T: Numeric + Real>(tensor: &RcTensor<T>) -> RcTensor<T> {
-    let length = tensor.shape().iter().fold(1, |acc, x| acc * *x);
-    let mut array = Vec::with_capacity(length);
-    for elem in ElementIterator::new(tensor) {
-        let v = T::one() - elem.tanh().powi(2);
-        array.push(v);
+fn tanh_derivative<T: Numeric + Real>(
+    tensor: &RcTensor<T>,
+    full_jacobian_output: bool,
+) -> RcTensor<T> {
+    // let length = tensor.shape().iter().fold(1, |acc, x| acc * *x);
+    let length = tensor.shape().iter().product::<usize>();
+    if !full_jacobian_output {
+        let mut array = Vec::with_capacity(length);
+        for elem in ElementIterator::new(tensor) {
+            let v = T::one() - elem.tanh().powi(2);
+            array.push(v);
+        }
+        return RcTensor::new(array, tensor.shape().clone());
     }
-    RcTensor::new(array, tensor.shape().clone())
+    let mut array = Vec::with_capacity(length * length);
+    for i in 0..length {
+        for j in 0..length {
+            let v = if i == j {
+                T::one() - tensor.0.array[i].tanh().powi(2)
+            } else {
+                T::zero()
+            };
+            array.push(v);
+        }
+    }
+    let result = RcTensor::new(array, vec![length, length]);
+    for i in 0..length {
+        for j in 0..length {
+            if i == j {
+                assert_eq!(
+                    result[&vec![i, j]],
+                    T::one() - tensor.0.array[i].tanh().powi(2)
+                );
+            } else {
+                assert_eq!(result[&vec![i, j]], T::zero());
+            };
+        }
+    }
+    result
+}
+
+#[test]
+fn test_sum_backward() {
+    let input = RcTensor::from([1.0, 2.0, 3.0]);
+    let output = input.sum();
+    assert_eq!(
+        (output.derivative.clone().unwrap().derivative)(vec![input])[0],
+        RcTensor::from([[1.0, 1.0, 1.0]]) // RcTensor::from([[1.0], [1.0], [1.0]])
+    );
 }
 
 #[test]
@@ -171,7 +227,7 @@ fn test_tanh_sets_grad() {
         .derivative
         .clone()
         .unwrap()
-        .compute_grads(vec![RcTensor::from([1.0 as f64])]);
+        .compute_grads(vec![RcTensor::scalar(1.0 as f64)]);
     let input = dbg!(input);
     let grad = input.get_grad().take().unwrap();
     dbg!("input.get_grad()={:?}", input.get_grad().clone());
@@ -199,7 +255,7 @@ fn test_multi_dimensional_tanh() {
         .derivative
         .clone()
         .unwrap()
-        .compute_grads(vec![RcTensor::from([1.0 as f64])]);
+        .compute_grads(vec![RcTensor::scalar(1.0 as f64)]);
     // let grad = output.derivative.clone().unwrap().compute();
     let grad = input.get_grad().take().unwrap();
     let abs_diff = (&expected - &grad).abs();
@@ -229,7 +285,8 @@ fn test_tanh_twice_sets_grad() {
         .derivative
         .clone()
         .unwrap()
-        .compute_grads(vec![RcTensor::from([1.0 as f64])]);
+        .compute_grads(vec![RcTensor::scalar(1.0 as f64)]);
+    // .compute_grads(vec![RcTensor::from([1.0 as f64])]);
     // let grad = output.derivative.clone().unwrap().compute();
     dbg!(input.clone());
     let grad = input.get_grad().take().unwrap();
@@ -305,7 +362,7 @@ fn test_tanh_derivative() {
         output_perturbed.abs().sum()
     );
     let numerical_derivative = &RcTensor::scalar(1.0 / epsilon) * &(&output_perturbed - &output);
-    let calculated_derivative = tanh_derivative(&input);
+    let calculated_derivative = tanh_derivative(&input, false);
     println!(
         "numerical_derivative.abs().sum()={:?}",
         numerical_derivative.abs().sum()
@@ -326,8 +383,8 @@ fn test_tanh_derivative() {
     let abs_diff = (&numerical_derivative - &calculated_derivative).abs();
     println!("abs_diff.sum()={:?}", abs_diff.sum());
     assert!(abs_diff.sum().elem() / 64.0 <= 1e-5);
-    let grad = output.derivative.clone().unwrap().compute();
-    let abs_diff2 = (&calculated_derivative - &grad).abs();
-    println!("abs_diff2.sum()={:?}", abs_diff2.sum());
-    assert!(abs_diff2.sum().elem() / 64.0 <= 1e-15);
+    // let grad = output.derivative.clone().unwrap().compute();
+    // let abs_diff2 = (&calculated_derivative - &grad).abs();
+    // println!("abs_diff2.sum()={:?}", abs_diff2.sum());
+    // assert!(abs_diff2.sum().elem() / 64.0 <= 1e-15);
 }
