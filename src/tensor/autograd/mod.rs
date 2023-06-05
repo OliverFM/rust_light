@@ -1,5 +1,5 @@
 use super::numeric::*;
-use crate::tensor::functional;
+
 
 use crate::tensor::{ElementIterator, RawTensor, RcTensor, TensorLike};
 use num::traits::real::Real;
