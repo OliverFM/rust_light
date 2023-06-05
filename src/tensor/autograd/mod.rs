@@ -1,6 +1,5 @@
 use super::numeric::*;
 
-
 use crate::tensor::{ElementIterator, RawTensor, RcTensor, TensorLike};
 use num::traits::real::Real;
 
@@ -14,7 +13,7 @@ pub(in crate::tensor) struct Derivative<T: Numeric> {
     // Even bigger issue: what if we have f(h(x), g(x))
     inputs: Vec<RcTensor<T>>,
     // TODO: remove the need to take ownership here
-    jacobian_vector_product: fn(Vec<RcTensor<T>>) -> Vec<RcTensor<T>>,
+    jacobian_vector_product: fn(Vec<RcTensor<T>>, Vec<RcTensor<T>>) -> Vec<RcTensor<T>>,
 }
 
 #[derive(Debug, PartialEq, Clone)]
@@ -27,13 +26,13 @@ pub struct DerivativeConst<T: Numeric, const N: usize> {
 impl<T: Numeric> Derivative<T> {
     pub fn new(
         inputs: Vec<RcTensor<T>>,
-        derivative: fn(Vec<RcTensor<T>>) -> Vec<RcTensor<T>>,
+        jacobian_vector_product: fn(Vec<RcTensor<T>>, Vec<RcTensor<T>>) -> Vec<RcTensor<T>>,
         // TODO: switch this to working on views.
         // OR just force everythng to be flat... and set to the same shape at the end...
     ) -> Derivative<T> {
         Derivative {
             inputs,
-            jacobian_vector_product: derivative,
+            jacobian_vector_product,
         }
     }
 
@@ -72,35 +71,35 @@ impl<T: Numeric> Derivative<T> {
         // f(g(h(x))) how do i set x.grad if we are now computing f'
         // grad = f'(g(hx)) g'(h(x)) h'(x)
         // f(g(h(x), z)) how do i set x.grad if we are now computing f'
-        let self_grads = (self.jacobian_vector_product)(self.inputs.clone());
-        let self_grad = self_grads[0].clone();
-        let outer_grad = outer_grads[0].clone();
-        self.inputs[0].set_grad(self_grad.clone());
-        dbg!(outer_grad.shape().clone());
-        dbg!(self_grad.shape().clone());
-        let new_grad = if self_grad.is_scalar()
-            || self_grad.shape().iter().product::<usize>() == 1
-            || outer_grad.is_scalar()
-            || outer_grad.shape().iter().product::<usize>() == 1
-        {
-            assert!(outer_grad.is_scalar() || outer_grad.shape().iter().product::<usize>() == 1);
-            outer_grad * self_grad
-        } else {
-            outer_grad.bmm(&self_grad)
-        };
-
-        let shaped_grad = RcTensor::new(new_grad.0.array.clone(), self.inputs[0].shape().to_vec());
+        let self_grads = (self.jacobian_vector_product)(self.inputs.clone(), outer_grads.clone());
+        let grad = self_grads[0].clone();
+        let shaped_grad = RcTensor::new(grad.0.array.clone(), self.inputs[0].shape().to_vec());
         self.inputs[0].set_grad(shaped_grad);
         if let Some(d) = self.inputs[0].derivative.as_ref() {
-            d.compute_jvp(vec![new_grad])
+            d.compute_jvp(vec![grad])
         }
     }
 }
 
-pub fn ones<T: Numeric>(tensors: Vec<RcTensor<T>>) -> Vec<RcTensor<T>> {
+fn jvp_from_full_jacobians<T: Numeric>(left: RcTensor<T>, right: RcTensor<T>) -> RcTensor<T> {
+    if right.is_scalar()
+        || right.shape().iter().product::<usize>() == 1
+        || left.is_scalar()
+        || left.shape().iter().product::<usize>() == 1
+    {
+        assert!(left.is_scalar() || left.shape().iter().product::<usize>() == 1);
+        left * right
+    } else {
+        left.bmm(&right)
+    }
+}
+
+pub fn ones<T: Numeric>(tensors: Vec<RcTensor<T>>, grads: Vec<RcTensor<T>>) -> Vec<RcTensor<T>> {
     assert!(tensors.len() == 1);
-    let length = tensors[0].shape().iter().product::<usize>();
-    let raw_tensor = RawTensor::new_with_filler(vec![1, length], T::one());
+    assert!(grads.len() == 1);
+    let length_1 = tensors[0].shape().iter().product::<usize>();
+    let length_2 = grads[0].shape().iter().product::<usize>();
+    let raw_tensor = RawTensor::new_with_filler(vec![length_2, length_1], T::one());
     dbg!("sum_backward", vec![RcTensor::from_raw(raw_tensor)]).1
 }
 
@@ -115,9 +114,14 @@ pub fn tanh<T: Numeric + Real>(tensor: &RcTensor<T>) -> RcTensor<T> {
     RcTensor::from_raw(raw_tensor)
 }
 
-fn tanh_derivative_outer<T: Numeric + Real>(tensors: Vec<RcTensor<T>>) -> Vec<RcTensor<T>> {
+fn tanh_derivative_outer<T: Numeric + Real>(
+    tensors: Vec<RcTensor<T>>,
+    grads: Vec<RcTensor<T>>,
+) -> Vec<RcTensor<T>> {
     assert!(tensors.len() == 1);
-    vec![tanh_derivative(&tensors[0], true)]
+    let jacobian = tanh_derivative(&tensors[0], true);
+    let new_grad = jvp_from_full_jacobians(grads[0].clone(), jacobian);
+    vec![new_grad]
 }
 
 fn tanh_derivative<T: Numeric + Real>(

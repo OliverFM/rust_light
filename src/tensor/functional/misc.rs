@@ -11,7 +11,10 @@ pub(crate) fn todo_backward<T: Numeric>(
 ) -> Vec<RcTensor<T>> {
     todo!()
 }
-pub(crate) fn todo_deriv<T: Numeric>(_inputs: Vec<RcTensor<T>>) -> Vec<RcTensor<T>> {
+pub(crate) fn todo_deriv<T: Numeric>(
+    _inputs: Vec<RcTensor<T>>,
+    _: Vec<RcTensor<T>>,
+) -> Vec<RcTensor<T>> {
     todo!()
 }
 
