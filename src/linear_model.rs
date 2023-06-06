@@ -1,4 +1,4 @@
-use super::tensor::{Numeric, RcTensor, TensorLike, TensorLikePublic};
+use super::tensor::{Numeric, RcTensor, TensorLike};
 
 pub struct LinearLayer<T>
 where
@@ -14,7 +14,7 @@ where
 {
     pub fn forward<U>(&self, batch: &U) -> RcTensor<T>
     where
-        U: TensorLikePublic<Elem = T>,
+        U: TensorLike<Elem = T>,
     {
         let y = self.weights.bmm(batch);
         println!("y.shape()={:?}", y.shape());

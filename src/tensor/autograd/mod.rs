@@ -13,6 +13,7 @@ pub(in crate::tensor) struct Derivative<T: Numeric> {
     // Even bigger issue: what if we have f(h(x), g(x))
     inputs: Vec<RcTensor<T>>,
     // TODO: remove the need to take ownership here
+    /// signature: jvp(inputs, jacobians)
     jacobian_vector_product: fn(Vec<RcTensor<T>>, Vec<RcTensor<T>>) -> Vec<RcTensor<T>>,
 }
 
@@ -65,23 +66,26 @@ impl<T: Numeric> Derivative<T> {
     /// Recursively expanding the JVP of the input with the chain rule
     /// e.g. for f(g(h(x))), jvp(1.0) = jvp(1.0 * f'(g(h(x))))
     pub fn compute_jvp(&self, outer_grads: Vec<RcTensor<T>>) {
-        assert!(self.inputs.len() == 1);
-        assert!(outer_grads.len() == 1);
-
         // f(g(h(x))) how do i set x.grad if we are now computing f'
         // grad = f'(g(hx)) g'(h(x)) h'(x)
         // f(g(h(x), z)) how do i set x.grad if we are now computing f'
         let self_grads = (self.jacobian_vector_product)(self.inputs.clone(), outer_grads);
-        let grad = self_grads[0].clone();
-        let shaped_grad = RcTensor::new(grad.0.array.clone(), self.inputs[0].shape().to_vec());
-        self.inputs[0].set_grad(shaped_grad);
-        if let Some(d) = self.inputs[0].derivative.as_ref() {
-            d.compute_jvp(vec![grad])
+        for (grad, input) in self_grads.iter().zip(self.inputs.iter()) {
+            let shaped_grad = RcTensor::new(grad.0.array.clone(), input.shape().to_vec());
+            input.update_grad(shaped_grad);
+            if let Some(d) = input.derivative.as_ref() {
+                d.compute_jvp(vec![grad.clone()])
+            }
         }
     }
 }
 
-fn jvp_from_full_jacobians<T: Numeric>(left: RcTensor<T>, right: RcTensor<T>) -> RcTensor<T> {
+/// When used for making a jacobian_vector_product function
+/// left ought to be the gradient passed in and right is the computed jacobian
+pub(in crate::tensor) fn jvp_from_full_jacobians<T: Numeric>(
+    left: RcTensor<T>,
+    right: RcTensor<T>,
+) -> RcTensor<T> {
     if right.is_scalar()
         || right.shape().iter().product::<usize>() == 1
         || left.is_scalar()
@@ -119,6 +123,7 @@ fn tanh_derivative_outer<T: Numeric + Real>(
     grads: Vec<RcTensor<T>>,
 ) -> Vec<RcTensor<T>> {
     assert!(tensors.len() == 1);
+    assert!(grads.len() == 1);
     let jacobian = tanh_derivative(&tensors[0], true);
     let new_grad = jvp_from_full_jacobians(grads[0].clone(), jacobian);
     vec![new_grad]
@@ -128,7 +133,6 @@ fn tanh_derivative<T: Numeric + Real>(
     tensor: &RcTensor<T>,
     full_jacobian_output: bool,
 ) -> RcTensor<T> {
-    // let length = tensor.shape().iter().fold(1, |acc, x| acc * *x);
     let length = tensor.shape().iter().product::<usize>();
     if !full_jacobian_output {
         let mut array = Vec::with_capacity(length);

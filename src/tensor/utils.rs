@@ -1,4 +1,5 @@
 use crate::tensor::numeric::Numeric;
+use crate::tensor::SliceRange;
 use crate::tensor::TensorLike;
 
 pub struct ElementIterator<T, U, V>
@@ -119,6 +120,75 @@ fn reset_trailing_indices(index: &mut [usize], position: usize) {
     }
 }
 
+pub(in crate::tensor) fn get_global_index(
+    shape: &[usize],
+    index: &Vec<usize>,
+    offset: Option<&Vec<SliceRange>>,
+) -> Result<usize, String> {
+    if index.len() < shape.len() {
+        // TODO: allow this case as long as extra dims are 1.
+        return Err(format!(
+            "shapes do not match: self.shape={:?}, index={:?}
+                Need index to be at least as long as shape.",
+            shape, index,
+        ));
+    }
+    let mut global_idx = 0;
+    let mut multiplier = 1;
+    // TODO: consider turning this into a fold operation.
+    for (i, (&dim, &idx_dim)) in shape.iter().rev().zip(index.iter().rev()).enumerate() {
+        // Fix the indexing.  We need to have all the reverses index may be shorter than shape.
+        let i = shape.len() - i - 1;
+        let shaped_dim;
+        let shifted_idx;
+        if dim == 1 {
+            // we pick the 0th element during broadcasting
+            continue;
+        }
+        if let Some(range_vec) = offset {
+            // println!("setting offset: {:?}", range_vec.clone());
+            shaped_dim = range_vec[i].end - range_vec[i].start;
+            shifted_idx = range_vec[i].start + idx_dim;
+        } else {
+            shaped_dim = dim;
+            shifted_idx = idx_dim;
+        }
+        if shaped_dim <= idx_dim {
+            return Err(format!(
+                    "Trying to index too far into the view! -- &TensorView has dimension:
+                    {:?}
+                    Offest{:?}
+                    index is:
+                    {:?}
+                    the {}th position is out-of-bounds!
+                    shaped_dim={shaped_dim}, shifted_idx={shifted_idx}, dim={dim}, idx_dim={idx_dim}",
+                    shape,
+                    offset,
+                    index,
+                    i,
+                ));
+        }
+
+        if dim <= shifted_idx {
+            return Err(format!(
+                    "shape do not match -- &TensorView has dimension:
+                    {:?}
+                    Offest{:?}
+                    index is:
+                    {:?}
+                    the {}th position is out-of-bounds!
+                    shaped_dim={shaped_dim}, shifted_idx={shifted_idx}, dim={dim}, idx_dim={idx_dim}",
+                    shape,
+                    offset,
+                    index,
+                    i,
+                ));
+        }
+        global_idx += shifted_idx * multiplier;
+        multiplier *= dim;
+    }
+    Ok(global_idx)
+}
 #[test]
 fn test_increment_index() {
     let mut index = vec![0, 0, 0];

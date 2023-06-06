@@ -1,16 +1,10 @@
+use super::functional;
 use super::numeric::*;
 use super::utils::IndexIterator;
 use super::{RawTensor, RcTensor, SliceRange, TensorView};
 use std::ops::Deref;
 
 pub trait TensorLikePublic: TensorLike {}
-
-impl<T, U> TensorLikePublic for U
-where
-    T: Numeric,
-    U: TensorLike<Elem = T>,
-{
-}
 
 pub(in crate::tensor) mod private {
     pub trait TensorLikePrivate {}
@@ -31,7 +25,10 @@ pub trait TensorLike: TensorLikePrivate + std::fmt::Debug {
     type SumType: TensorLike<Elem = Self::Elem>;
     type GradType: TensorLike;
 
-    fn set_grad(&self, _grad: Self::GradType) {
+    fn update_grad(&self, _grad: Self::GradType) {
+        todo!();
+    }
+    fn zero_grad(&self) {
         todo!();
     }
 
@@ -58,6 +55,13 @@ pub trait TensorLike: TensorLikePrivate + std::fmt::Debug {
     /// Convert this self into a new Tensor -- is self is already a Tensor this is a clone.
     /// for a `TensorView`, for example, the new Tensor is the same shape as the view.
     fn to_tensor(&self) -> RcTensor<Self::Elem>;
+
+    fn deep_clone(&self) -> RcTensor<Self::Elem> {
+        let mut raw_tensor = self.to_tensor().0.deref().clone();
+        raw_tensor.derivative = None;
+        raw_tensor.zero_grad();
+        RcTensor::from_raw(raw_tensor)
+    }
 
     fn slice(&self, offset: Vec<SliceRange>) -> TensorView<Self::Elem>;
 
@@ -105,64 +109,9 @@ pub trait TensorLike: TensorLikePrivate + std::fmt::Debug {
 
     // TODO: consider making this private with type magic
     // https://jack.wrenn.fyi/blog/private-trait-methods/
-    #[inline]
     fn bmm_rc<U>(&self, right: &U) -> RcTensor<Self::Elem>
     where
-        U: TensorLike<Elem = Self::Elem>,
-    {
-        RcTensor::from_raw(self.bmm_raw(right))
-    }
-
-    #[inline]
-    fn bmm_raw<U>(&self, right: &U) -> RawTensor<Self::Elem>
-    where
-        U: TensorLike<Elem = Self::Elem>,
-    {
-        // assert!(2 <= self.shape().len() && self.shape().len() <= 3); // For now we can only do Batch matrix
-        dbg!(self.shape().to_vec());
-        assert!(2 <= self.shape().len()); // For now we can only do Batch matrix
-        assert!(right.shape().len() == 2); // rhs must be a matrix
-        assert!(self.shape()[self.shape().len() - 1] == right.shape()[right.shape().len() - 2]);
-        let new_shape = if self.shape().len() == 2 {
-            vec![1, self.shape()[0], right.shape()[1]]
-        } else {
-            vec![self.shape()[0], self.shape()[1], right.shape()[1]]
-        };
-
-        let mut result = RawTensor::new_empty(new_shape);
-
-        let mut self_index = self.shape().clone();
-        let self_index_len = self_index.len();
-        let mut right_index = right.shape().clone();
-        for batch_idx in 0..result.shape[0] {
-            if self.shape().len() == 3 {
-                self_index[0] = batch_idx;
-            }
-            for i in 0..result.shape[1] {
-                self_index[self_index_len - 2] = i;
-                for j in 0..result.shape[2] {
-                    right_index[1] = j;
-                    let mut val = Self::Elem::zero();
-                    for k in 0..right.shape()[0] {
-                        self_index[self_index_len - 1] = k;
-                        right_index[0] = k;
-                        val = val
-                            + *self.get(&self_index).unwrap().deref()
-                                * (*right.get(&right_index).unwrap().deref());
-                    }
-                    result.array.push(val);
-                }
-            }
-        }
-        if self.shape().len() == 2 {
-            return RawTensor {
-                array: result.array,
-                shape: result.shape[1..].to_vec(),
-                ..Default::default()
-            };
-        }
-        result
-    }
+        U: TensorLike<Elem = Self::Elem>;
 
     fn same_shape<U, V>(&self, other: &U) -> bool
     where
