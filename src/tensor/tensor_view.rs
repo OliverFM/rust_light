@@ -124,7 +124,7 @@ where
     fn get(&self, index: &Vec<usize>) -> Result<&T, String> {
         let idx = self
             .tensor
-            .get_global_index(index, Some(&self.view.offset))
+            .global_index(index, Some(&self.view.offset))
             .unwrap();
         Ok(&self.tensor.array[idx])
     }

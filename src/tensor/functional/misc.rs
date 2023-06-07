@@ -2,7 +2,7 @@ use super::super::numeric::*;
 use crate::tensor::autograd::Derivative;
 use crate::tensor::utils::ElementIterator;
 
-use crate::tensor::{autograd, get_global_index, RawTensor, RcTensor, TensorLike};
+use crate::tensor::{autograd, global_index, RawTensor, RcTensor, TensorLike};
 use std::ops::Deref;
 
 pub(crate) fn todo_backward<T: Numeric>(

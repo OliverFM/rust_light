@@ -120,7 +120,60 @@ fn reset_trailing_indices(index: &mut [usize], position: usize) {
     }
 }
 
-pub(in crate::tensor) fn get_global_index(
+pub(in crate::tensor) fn tensor_index(
+    global_index: usize,
+    shape: &[usize],
+) -> Result<Vec<usize>, String> {
+    let mut index = Vec::with_capacity(shape.len());
+    match tensor_index_inplace(global_index, shape, &mut index) {
+        Err(e) => Err(e),
+        Ok(()) => Ok(index),
+    }
+}
+
+pub(in crate::tensor) fn tensor_index_inplace(
+    global_index: usize,
+    shape: &[usize],
+    index: &mut Vec<usize>,
+) -> Result<(), String> {
+    index.clear();
+    // shape.iter().fold(global_index, |acc, dim|  )
+
+    for _ in 0..shape.len() {
+        index.push(0);
+    }
+
+    let mut global_index = global_index;
+    for (idx, &dim) in shape.iter().enumerate().rev() {
+        index[idx] = global_index % dim;
+        global_index /= dim;
+    }
+
+    if global_index > 0 {
+        Err(format!("index is too big: {global_index}"))
+    } else {
+        Ok(())
+    }
+}
+
+#[test]
+fn test_tensor_index() {
+    let mut index = Vec::new();
+    for shape in [
+        vec![1, 2, 3, 1],
+        vec![3, 12, 7, 4, 1, 1, 2, 13],
+        vec![1, 2, 3, 4, 5, 7],
+    ] {
+        for i in 0..shape.iter().product::<usize>() {
+            tensor_index_inplace(i, &shape, &mut index).unwrap();
+
+            println!("i={i}, index={index:?}");
+            assert_eq!(i, global_index(&shape, &index, None).unwrap());
+        }
+    }
+}
+
+pub(in crate::tensor) fn global_index(
     shape: &[usize],
     index: &Vec<usize>,
     offset: Option<&Vec<SliceRange>>,
