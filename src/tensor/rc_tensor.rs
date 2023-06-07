@@ -3,7 +3,7 @@ use std::rc::Rc;
 use std::cell::RefCell;
 use std::cmp::PartialEq;
 use std::convert::From;
-use std::ops::{Deref, Mul};
+use std::ops::{Add, Deref, Mul, Sub};
 
 use super::autograd::{self, Derivative};
 
@@ -11,6 +11,7 @@ use super::numeric::*;
 use super::raw_tensor::*;
 use super::tensor_like::*;
 use super::tensor_view::*;
+use crate::tensor::functional;
 
 // fn ones<T: Numeric>(tensors: Vec<RcTensor<T>>) -> RcTensor<T> {
 //     assert_eq!(tensors.len(), 1);
@@ -128,10 +129,12 @@ where
     type SumType = Scalar<Self::Elem>;
     type GradType = RcTensor<T>;
 
-    fn set_grad(&self, grad: Self::GradType) {
-        let grad_clone = grad.clone();
-        *self.grad.borrow_mut() = Some(grad);
-        dbg!("setting grads:", self.clone(), grad_clone);
+    fn update_grad(&self, grad: Self::GradType) {
+        self.0.update_grad(grad);
+    }
+
+    fn zero_grad(&self) {
+        self.0.zero_grad();
     }
 
     fn dot<U, V>(&self, _other: U) -> RcTensor<Self::Elem>
@@ -173,6 +176,14 @@ where
     {
         self.bmm_rc(right)
     }
+
+    #[inline]
+    fn bmm_rc<U>(&self, right: &U) -> RcTensor<Self::Elem>
+    where
+        U: TensorLike<Elem = Self::Elem>,
+    {
+        RcTensor::from_raw(functional::bmm_raw(self, right))
+    }
 }
 
 impl<T> From<T> for RcTensor<T>
@@ -204,6 +215,48 @@ where
     fn from(value: [U; N]) -> RcTensor<T> {
         let raw_tensor = From::from(value.to_vec());
         RcTensor::from_raw(raw_tensor)
+    }
+}
+
+impl<T, U, V> Add<U> for &RcTensor<T>
+where
+    T: Numeric,
+    U: Deref<Target = V> + Clone + std::fmt::Debug,
+    V: TensorLike<Elem = T>,
+{
+    type Output = RcTensor<T>;
+    fn add(self, right: U) -> Self::Output {
+        let mut raw_tensor = self.0.deref().add(&*right);
+        raw_tensor.derivative = Some(Derivative::new(vec![self.to_tensor()], autograd::ones));
+        RcTensor::from_raw(raw_tensor)
+    }
+}
+
+impl<T, U, V> Add<U> for RcTensor<T>
+where
+    T: Numeric,
+    U: Deref<Target = V> + Clone + std::fmt::Debug,
+    V: TensorLike<Elem = T>,
+{
+    type Output = RcTensor<T>;
+    fn add(self, right: U) -> Self::Output {
+        let mut raw_tensor = self.0.deref().add(&*right);
+        // TODO: set derivative struct for right too
+        raw_tensor.derivative = Some(Derivative::new(vec![self.to_tensor()], autograd::ones));
+        RcTensor::from_raw(raw_tensor)
+    }
+}
+
+impl<T, U, V> Sub<&U> for &RcTensor<T>
+where
+    T: Numeric + Neg,
+    U: TensorLike<Elem = T>,
+    for<'a> &'a U: Neg<Output = V>,
+    V: TensorLike<Elem = T>,
+{
+    type Output = RcTensor<T>;
+    fn sub(self, right: &U) -> Self::Output {
+        RcTensor::from_raw(self.0.sub(right))
     }
 }
 

@@ -136,69 +136,7 @@ where
         index: &Vec<usize>,
         offset: Option<&Vec<SliceRange>>,
     ) -> Result<usize, String> {
-        if index.len() < self.shape().len() {
-            // TODO: allow this case as long as extra dims are 1.
-            return Err(format!(
-                "shapes do not match: self.shape={:?}, index={:?}
-                Need index to be at least as long as shape.",
-                self.shape, index,
-            ));
-        }
-        let mut global_idx = 0;
-        let mut multiplier = 1;
-        // TODO: consider turning this into a fold operation.
-        for (i, (&dim, &idx_dim)) in self.shape.iter().rev().zip(index.iter().rev()).enumerate() {
-            // Fix the indexing.  We need to have all the reverses index may be shorter than shape.
-            let i = self.shape.len() - i - 1;
-            let shaped_dim;
-            let shifted_idx;
-            if dim == 1 {
-                // we pick the 0th element during broadcasting
-                continue;
-            }
-            if let Some(range_vec) = offset {
-                // println!("setting offset: {:?}", range_vec.clone());
-                shaped_dim = range_vec[i].end - range_vec[i].start;
-                shifted_idx = range_vec[i].start + idx_dim;
-            } else {
-                shaped_dim = dim;
-                shifted_idx = idx_dim;
-            }
-            if shaped_dim <= idx_dim {
-                return Err(format!(
-                    "Trying to index too far into the view! -- &TensorView has dimension:
-                    {:?}
-                    Offest{:?}
-                    index is:
-                    {:?}
-                    the {}th position is out-of-bounds!
-                    shaped_dim={shaped_dim}, shifted_idx={shifted_idx}, dim={dim}, idx_dim={idx_dim}",
-                    self.shape,
-                    offset,
-                    index,
-                    i,
-                ));
-            }
-
-            if dim <= shifted_idx {
-                return Err(format!(
-                    "shape do not match -- &TensorView has dimension:
-                    {:?}
-                    Offest{:?}
-                    index is:
-                    {:?}
-                    the {}th position is out-of-bounds!
-                    shaped_dim={shaped_dim}, shifted_idx={shifted_idx}, dim={dim}, idx_dim={idx_dim}",
-                    self.shape,
-                    offset,
-                    index,
-                    i,
-                ));
-            }
-            global_idx += shifted_idx * multiplier;
-            multiplier *= dim;
-        }
-        Ok(global_idx)
+        get_global_index(&self.shape, index, offset)
     }
 
     pub(in crate::tensor) fn new_empty(shape: Vec<usize>) -> RawTensor<T> {
@@ -363,8 +301,24 @@ where
         F::dot_no_derivative(self, other)
     }
 
-    fn set_grad(&self, grad: Self::GradType) {
-        *self.grad.borrow_mut() = Some(grad);
+    #[inline]
+    fn bmm_rc<U>(&self, right: &U) -> RcTensor<Self::Elem>
+    where
+        U: TensorLike<Elem = Self::Elem>,
+    {
+        RcTensor::from_raw(functional::bmm_raw(self, right))
+    }
+
+    fn zero_grad(&self) {
+        *self.grad.borrow_mut() = None;
+    }
+
+    fn update_grad(&self, grad: Self::GradType) {
+        let new_grad = match self.grad.borrow().as_ref() {
+            None => Some(grad),
+            Some(other_grad) => Some(other_grad + &grad),
+        };
+        *self.grad.borrow_mut() = new_grad;
     }
     fn shape(&self) -> Self::ShapeReturn<'_> {
         &self.shape
@@ -376,7 +330,7 @@ where
             .iter()
             .fold(Self::Elem::zero(), |acc, x| acc + *x);
         let scalar = RawTensor::from(v);
-        scalar.set_grad(RcTensor::new_with_filler(
+        scalar.update_grad(RcTensor::new_with_filler(
             self.shape.clone(),
             Self::Elem::one(),
         ));
@@ -400,34 +354,7 @@ where
     where
         U: TensorLike<Elem = Self::Elem>,
     {
-        self.bmm_raw(right)
-    }
-}
-
-impl<T, U> Add<&U> for &RcTensor<T>
-where
-    T: Numeric,
-    U: TensorLike<Elem = T>,
-{
-    type Output = RcTensor<T>;
-    fn add(self, right: &U) -> Self::Output {
-        let mut raw_tensor = self.deref().add(right);
-        // TODO: set derivative struct for right too
-        raw_tensor.derivative = Some(Derivative::new(vec![self.to_tensor()], autograd::ones));
-        RcTensor::from_raw(raw_tensor)
-    }
-}
-
-impl<T, U, V> Sub<&U> for &RcTensor<T>
-where
-    T: Numeric + Neg,
-    U: TensorLike<Elem = T>,
-    for<'a> &'a U: Neg<Output = V>,
-    V: TensorLike<Elem = T>,
-{
-    type Output = RcTensor<T>;
-    fn sub(self, right: &U) -> Self::Output {
-        RcTensor::from_raw(self.0.sub(right))
+        functional::bmm_raw(self, right)
     }
 }
 

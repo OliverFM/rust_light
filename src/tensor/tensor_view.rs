@@ -1,4 +1,5 @@
 use super::numeric::*;
+use crate::tensor::functional;
 use crate::tensor::{ElementIterator, RcTensor, Scalar, SliceRange, TensorLike, TensorLikePrivate};
 
 use std::cmp::PartialEq;
@@ -131,11 +132,20 @@ where
     fn slice(&self, offset: Vec<SliceRange>) -> TensorView<T> {
         TensorView::new(self.tensor(), offset)
     }
+
     fn bmm<U>(&self, right: &U) -> Self::ResultTensorType<'_>
     where
         U: TensorLike<Elem = Self::Elem>,
     {
         self.bmm_rc(right)
+    }
+
+    #[inline]
+    fn bmm_rc<U>(&self, right: &U) -> RcTensor<Self::Elem>
+    where
+        U: TensorLike<Elem = Self::Elem>,
+    {
+        RcTensor::from_raw(functional::bmm_raw(self, right))
     }
 }
 
