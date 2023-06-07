@@ -182,7 +182,12 @@ where
     where
         U: TensorLike<Elem = Self::Elem>,
     {
-        RcTensor::from_raw(functional::bmm_raw(self, right))
+        let mut raw_tensor = functional::bmm_raw(self, right);
+        raw_tensor.derivative = Some(Derivative::new(
+            vec![self.clone(), right.to_tensor()],
+            functional::bmm_jvp_left_only,
+        ));
+        RcTensor::from_raw(raw_tensor)
     }
 }
 

@@ -1,6 +1,7 @@
 use super::numeric::*;
 use crate::tensor::functional;
-use crate::tensor::{ElementIterator, RcTensor, Scalar, SliceRange, TensorLike, TensorLikePrivate};
+use crate::tensor::utils::ElementIterator;
+use crate::tensor::{RcTensor, Scalar, SliceRange, TensorLike, TensorLikePrivate};
 
 use std::cmp::PartialEq;
 use std::ops::{Deref, Index};

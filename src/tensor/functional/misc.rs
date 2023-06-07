@@ -1,8 +1,8 @@
 use super::super::numeric::*;
 use crate::tensor::autograd::Derivative;
-use crate::tensor::utils::ElementIterator;
+use crate::tensor::utils::{global_index, tensor_index, ElementIterator};
 
-use crate::tensor::{autograd, global_index, RawTensor, RcTensor, TensorLike};
+use crate::tensor::{autograd, RawTensor, RcTensor, TensorLike};
 use std::ops::Deref;
 
 pub(crate) fn todo_backward<T: Numeric>(
@@ -95,38 +95,117 @@ where
     result
 }
 
-pub(crate) fn bmm_jvp<T: Numeric>(inputs: Vec<RcTensor<T>>, jacobians: Vec<RcTensor<T>>) {
+/// c[i,j] = dot(A[i, ..], B[..,j])
+/// so A[i,k] * B[k,j] appears for all j -> so J_A[ø[i,j], ø[i,k], ] = B[k,j]
+/// so A[i,k] * B[k,j] appears for all j -> so J_A[ø_J[i,j], ø_B[k,j], ] = A[i,k]
+/// : Key thing to note here is that J
+/// is over a flat input, and we are thinking about matrices, which makes this a bit weird.
+/// So we need to have some map ø(i,j)->k where i,j are matrix coords, and k is the param vector
+/// coords
+/// need to compute jacobians[0] @ J_A, jacobians[0] @ J_B with J_A being a matrix
+pub(crate) fn bmm_jvp_left_only<T: Numeric>(
+    inputs: Vec<RcTensor<T>>,
+    jacobians: Vec<RcTensor<T>>,
+) -> Vec<RcTensor<T>> {
     assert!(
         inputs.len() == 2 && jacobians.len() == 1,
         "inputs.len()={}, jacobians.len()={}",
         inputs.len(),
         jacobians.len()
     );
-    // c[i,j] = dot(A[i, ..], B[..,j])
-    // so A[i,k] * B[k,j] appears for all j -> so J_A[ø[i,k], ø[i,j]] = B[k,j]
-    // : Key thing to note here is that J
-    // is over a flat input, and we are thinking about matrices, which makes this a bit weird.
-    // So we need to have some map ø(i,j)->k where i,j are matrix coords, and k is the param vector
-    // coords
-    // need to compute jacobians[0] @ J_A, jacobians[0] @ J_B with J_A being a matrix
 
-    let shape = vec![jacobians[0].shape()[0], inputs[1].shape()[1]];
-    let length = jacobians[0].shape()[0] * inputs[1].shape()[1];
-    let mut array = Vec::<usize>::with_capacity(length);
+    assert_eq!(inputs[0].shape()[1], inputs[1].shape()[0]);
+    let bmm_output_shape = vec![inputs[0].shape()[0], inputs[1].shape()[1]];
+    let left_jacobian_shape = vec![
+        bmm_output_shape[0] * bmm_output_shape[1],
+        inputs[0].shape()[0] * inputs[0].shape()[1], // we are only doing this for the left input
+    ];
+    let left_output_shape = vec![jacobians[0].shape()[0], left_jacobian_shape[1]];
+    let left_length = left_output_shape[0] * left_output_shape[1]; // jacobians[0].shape()[0] * inputs[1].shape()[1];
+    let mut left_array = Vec::with_capacity(left_length);
+    for _ in 0..left_length {
+        left_array.push(T::zero());
+    }
 
-    // TODO: instead loop through all the non-zero values:
-    // J_A[ø[i,k], ø[i,j]] = B[k,j]
+    let right_jacobian_shape = vec![
+        bmm_output_shape[0] * bmm_output_shape[1],
+        inputs[1].shape()[0] * inputs[1].shape()[1], // we are only doing this for the left input
+    ];
+    let right_output_shape = vec![jacobians[0].shape()[0], right_jacobian_shape[1]];
+    let right_length = right_output_shape[0] * right_output_shape[1]; // jacobians[0].shape()[0] * inputs[1].shape()[1];
+    let mut right_array = Vec::with_capacity(right_length);
+    for _ in 0..right_length {
+        right_array.push(T::zero());
+    }
+
+    println!(
+        "inputs[0].shape()={:?}, inputs[1].shape()={:?}, 
+        self_jacobian_shape={:?},
+        left_output_shape={:?}
+        jacobians[0].shape()={:?}
+        bmm_output_shape={:?}",
+        inputs[0].shape(),
+        inputs[1].shape(),
+        &left_jacobian_shape,
+        &left_output_shape,
+        jacobians[0].shape(),
+        &bmm_output_shape,
+    );
+
+    // currently: loop through all the non-zero values:
+    // J_A[ø[i,j], ø[i,k]] = B[k,j]
     // Consider seeing if there is a way to get this to work such that we also build the array as
-    // we go
-    for i in 0..shape[0] {
-        for j in 0..shape[1] {
-            // sum_h jacobians[i, h] * J_A[h, j]
-            for k in 0..inputs[0].shape()[1] {
+    for i in 0..inputs[0].shape()[0] {
+        for k in 0..inputs[0].shape()[1] {
+            for j in 0..inputs[1].shape()[1] {
+                // sum_h jacobians[i, h] * J_A[h, j]
                 // loop through inner values of
+                let self_jac_idx0 = global_index(&vec![i, j], &bmm_output_shape, None).unwrap();
+                let left_jac_idx1 = global_index(&vec![i, k], inputs[0].shape(), None).unwrap(); // for J_A
+                let right_jac_idx1 = global_index(&vec![k, j], inputs[1].shape(), None).unwrap(); // for J_A
+                println!(
+                    "i={i}, k={k}, j={j}, self_jac_idx0={:?}, self_jac_idx1={:?}",
+                    &self_jac_idx0, &left_jac_idx1,
+                );
+                assert!(self_jac_idx0 < left_jacobian_shape[0]);
+                assert!(self_jac_idx0 < jacobians[0].shape()[1]);
+                assert!(left_jac_idx1 < left_jacobian_shape[1]);
+                for input_jac_idx in 0..jacobians[0].shape()[0] {
+                    let tmp_left = match global_index(
+                        &vec![input_jac_idx, left_jac_idx1],
+                        &left_output_shape,
+                        None,
+                    ) {
+                        Ok(t) => t,
+                        Err(e) => {
+                            panic!("{e}")
+                        }
+                    };
+                    left_array[tmp_left] = left_array[tmp_left]
+                        + jacobians[0][&vec![input_jac_idx, self_jac_idx0]]
+                            * inputs[1][&vec![k, j]];
+
+                    let tmp_right = match global_index(
+                        &vec![input_jac_idx, right_jac_idx1],
+                        &left_output_shape,
+                        None,
+                    ) {
+                        Ok(t) => t,
+                        Err(e) => {
+                            panic!("{e}")
+                        }
+                    };
+                    right_array[tmp_right] = left_array[tmp_right]
+                        + jacobians[0][&vec![input_jac_idx, self_jac_idx0]]
+                            * inputs[1][&vec![i, k]];
+                }
             }
         }
     }
-    todo!()
+    vec![
+        RcTensor::new(left_array, left_output_shape),
+        RcTensor::new(right_array, right_output_shape),
+    ]
 }
 
 pub fn element_wise_multiplication<T, U1, V1, U2, V2>(left: U1, right: U2) -> RawTensor<T>
@@ -197,4 +276,23 @@ fn test_dot() {
     let v = vec![0, 1, 2];
     let vec = RcTensor::new(v, vec![3]);
     assert_eq!(dot(&vec, &vec), RcTensor::new(vec![5], vec![1]));
+}
+
+#[test]
+fn test_bmm_jvp() {
+    let matrix_a = RcTensor::from([[1.0, 2.0], [3.0, 4.0]]);
+    let matrix_b = RcTensor::from([[10.0, 3.0], [42.0, -7.0]]);
+
+    // calculated by hand and checked against pytorch
+    let expected_jvp_a = RcTensor::from([[13.0, 42.0 + -7.0], [10.0 + 3.0, 42.0 + -7.0]]);
+    let expected_jvp_b = RcTensor::from([[4., 4.], [6., 6.]]);
+    matrix_a.bmm(&matrix_b).sum().backward();
+    assert_eq!(
+        *matrix_a.get_grad().borrow().as_ref().unwrap(),
+        expected_jvp_a
+    );
+    assert_eq!(
+        *matrix_b.get_grad().borrow().as_ref().unwrap(),
+        expected_jvp_b
+    );
 }

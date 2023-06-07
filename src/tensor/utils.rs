@@ -168,14 +168,14 @@ fn test_tensor_index() {
             tensor_index_inplace(i, &shape, &mut index).unwrap();
 
             println!("i={i}, index={index:?}");
-            assert_eq!(i, global_index(&shape, &index, None).unwrap());
+            assert_eq!(i, global_index(&index, &shape, None).unwrap());
         }
     }
 }
 
 pub(in crate::tensor) fn global_index(
-    shape: &[usize],
     index: &Vec<usize>,
+    shape: &[usize],
     offset: Option<&Vec<SliceRange>>,
 ) -> Result<usize, String> {
     if index.len() < shape.len() {
@@ -242,6 +242,20 @@ pub(in crate::tensor) fn global_index(
     }
     Ok(global_idx)
 }
+
+// #[test]
+// fn test_global_index() {
+//     let m = 4;
+//     let n = 4;
+//     for i in 0..m {
+//         for j in 0..n {
+//             let idx = global_index(&vec![i, j], &vec![4, 4], None).unwrap();
+//             assert!(idx[0] <= m, "idx[0]={idx[0]}, m={m}");
+//             assert!(idx[1] <= n, "idx[1]={idx[1]}, n={n}");
+//         }
+//     }
+// }
+
 #[test]
 fn test_increment_index() {
     let mut index = vec![0, 0, 0];

@@ -136,7 +136,7 @@ where
         index: &Vec<usize>,
         offset: Option<&Vec<SliceRange>>,
     ) -> Result<usize, String> {
-        global_index(&self.shape, index, offset)
+        global_index(index, &self.shape, offset)
     }
 
     pub(in crate::tensor) fn new_empty(shape: Vec<usize>) -> RawTensor<T> {
