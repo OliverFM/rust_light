@@ -1,6 +1,6 @@
-use super::tensor::{Numeric, RcTensor, TensorLike};
+use crate::tensor::{Numeric, RcTensor, TensorLike};
 
-pub struct LinearLayer<T>
+pub struct Linear<T>
 where
     T: Numeric,
 {
@@ -8,7 +8,7 @@ where
     bias: RcTensor<T>,
 }
 
-impl<T> LinearLayer<T>
+impl<T> Linear<T>
 where
     T: Numeric,
 {
@@ -22,11 +22,15 @@ where
 
         &y + &self.bias
     }
+
+    pub fn new(weights: RcTensor<T>, bias: RcTensor<T>) -> Self {
+        Linear { weights, bias }
+    }
 }
 
 #[test]
 fn test_layer() {
-    let layer = LinearLayer {
+    let layer = Linear {
         weights: RcTensor::new_with_filler(vec![1, 2, 2], 1),
         bias: RcTensor::new_with_filler(vec![1, 2, 1], 1),
     };

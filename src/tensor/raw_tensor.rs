@@ -6,7 +6,7 @@ use std::cmp::{max, PartialEq};
 use std::convert::From;
 use std::ops::{Add, Deref, Index, Mul, Neg, Sub};
 
-use super::autograd::{Derivative};
+use super::autograd::Derivative;
 use super::functional as F;
 use super::functional;
 use super::numeric::*;
@@ -14,6 +14,7 @@ use super::rc_tensor::*;
 use super::tensor_like::*;
 use super::tensor_view::*;
 use super::utils::*;
+use super::IndexType;
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct SliceRange {
@@ -133,7 +134,7 @@ where
 
     pub(in crate::tensor) fn global_index(
         &self,
-        index: &Vec<usize>,
+        index: IndexType,
         offset: Option<&Vec<SliceRange>>,
     ) -> Result<usize, String> {
         global_index(index, &self.shape, offset)
@@ -202,7 +203,7 @@ where
     //     TensorView::new(tensor, shape)
     // }
 
-    fn set(&mut self, index: &Vec<usize>, value: T) -> Result<(), String> {
+    fn set(&mut self, index: IndexType, value: T) -> Result<(), String> {
         match self.global_index(index, None) {
             Ok(global_idx) => {
                 self.array[global_idx] = value;
@@ -224,7 +225,7 @@ where
     /// tensor.get(&vec![0,0,10, 0,1])
     /// );
     /// ```
-    fn get(&self, index: &Vec<usize>) -> Result<&T, String> {
+    fn get(&self, index: IndexType) -> Result<&T, String> {
         match self.global_index(index, None) {
             Ok(global_idx) => {
                 // dbg!("self={}, index={}, global_idx={}", self, index, global_idx);
@@ -236,7 +237,7 @@ where
 
     pub(super) fn get_with_offset(
         &self,
-        index: &Vec<usize>,
+        index: IndexType,
         offset: &Vec<SliceRange>,
     ) -> Result<&T, String> {
         match self.global_index(index, Some(offset)) {
@@ -252,7 +253,7 @@ where
 {
     type Output = T;
 
-    fn index(&self, index: &Vec<usize>) -> &Self::Output {
+    fn index(&self, index: IndexType) -> &Self::Output {
         self.get(index).unwrap()
     }
 }
@@ -347,7 +348,7 @@ where
     fn slice(&self, offset: Vec<SliceRange>) -> TensorView<T> {
         TensorView::new(RcTensor::from_raw(self.clone()), offset)
     }
-    fn get(&self, index: &Vec<usize>) -> Result<&Self::Elem, String> {
+    fn get(&self, index: IndexType) -> Result<&Self::Elem, String> {
         self.get(index)
     }
     fn bmm<U>(&self, right: &U) -> Self::ResultTensorType<'_>

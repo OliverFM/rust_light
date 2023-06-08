@@ -1,7 +1,6 @@
-
 use super::numeric::*;
 use super::utils::IndexIterator;
-use super::{RawTensor, RcTensor, SliceRange, TensorView};
+use super::{IndexType, RawTensor, RcTensor, SliceRange, TensorView};
 use std::ops::Deref;
 
 pub trait TensorLikePublic: TensorLike {}
@@ -32,7 +31,7 @@ pub trait TensorLike: TensorLikePrivate + std::fmt::Debug {
         todo!();
     }
 
-    fn get(&self, index: &Vec<usize>) -> Result<&Self::Elem, String>;
+    fn get(&self, index: IndexType) -> Result<&Self::Elem, String>;
 
     #[inline]
     fn get_first_elem(&self) -> &Self::Elem {

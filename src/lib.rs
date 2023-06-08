@@ -1,2 +1,3 @@
-pub mod linear_model;
+pub mod nn;
+pub mod optim;
 pub mod tensor;
