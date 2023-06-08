@@ -1,6 +1,7 @@
 use super::numeric::*;
 use crate::tensor::functional;
-use crate::tensor::{ElementIterator, RcTensor, Scalar, SliceRange, TensorLike, TensorLikePrivate};
+use crate::tensor::utils::ElementIterator;
+use crate::tensor::{RcTensor, Scalar, SliceRange, TensorLike, TensorLikePrivate};
 
 use std::cmp::PartialEq;
 use std::ops::{Deref, Index};
@@ -124,7 +125,7 @@ where
     fn get(&self, index: &Vec<usize>) -> Result<&T, String> {
         let idx = self
             .tensor
-            .get_global_index(index, Some(&self.view.offset))
+            .global_index(index, Some(&self.view.offset))
             .unwrap();
         Ok(&self.tensor.array[idx])
     }

@@ -1,6 +1,7 @@
 use super::numeric::*;
 
-use crate::tensor::{ElementIterator, RawTensor, RcTensor, TensorLike};
+use crate::tensor::utils::ElementIterator;
+use crate::tensor::{RawTensor, RcTensor, TensorLike};
 use num::traits::real::Real;
 
 // use std::rc::Rc;

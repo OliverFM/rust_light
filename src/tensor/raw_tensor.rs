@@ -6,7 +6,7 @@ use std::cmp::{max, PartialEq};
 use std::convert::From;
 use std::ops::{Add, Deref, Index, Mul, Neg, Sub};
 
-use super::autograd::{self, Derivative};
+use super::autograd::{Derivative};
 use super::functional as F;
 use super::functional;
 use super::numeric::*;
@@ -131,12 +131,12 @@ where
         self.array.len() == 1 && self.shape.is_empty()
     }
 
-    pub(in crate::tensor) fn get_global_index(
+    pub(in crate::tensor) fn global_index(
         &self,
         index: &Vec<usize>,
         offset: Option<&Vec<SliceRange>>,
     ) -> Result<usize, String> {
-        get_global_index(&self.shape, index, offset)
+        global_index(index, &self.shape, offset)
     }
 
     pub(in crate::tensor) fn new_empty(shape: Vec<usize>) -> RawTensor<T> {
@@ -203,7 +203,7 @@ where
     // }
 
     fn set(&mut self, index: &Vec<usize>, value: T) -> Result<(), String> {
-        match self.get_global_index(index, None) {
+        match self.global_index(index, None) {
             Ok(global_idx) => {
                 self.array[global_idx] = value;
                 Ok(())
@@ -225,7 +225,7 @@ where
     /// );
     /// ```
     fn get(&self, index: &Vec<usize>) -> Result<&T, String> {
-        match self.get_global_index(index, None) {
+        match self.global_index(index, None) {
             Ok(global_idx) => {
                 // dbg!("self={}, index={}, global_idx={}", self, index, global_idx);
                 Ok(&self.array[global_idx])
@@ -239,7 +239,7 @@ where
         index: &Vec<usize>,
         offset: &Vec<SliceRange>,
     ) -> Result<&T, String> {
-        match self.get_global_index(index, Some(offset)) {
+        match self.global_index(index, Some(offset)) {
             Ok(global_idx) => Ok(&self.array[global_idx]),
             Err(e) => Err(e),
         }

@@ -12,4 +12,3 @@ pub use raw_tensor::*;
 pub use rc_tensor::*;
 pub use tensor_like::*;
 pub use tensor_view::*;
-pub use utils::*;
