@@ -6,7 +6,7 @@ use std::cmp::{max, PartialEq};
 use std::convert::From;
 use std::ops::{Add, Deref, Index, Mul, Neg, Sub};
 
-use super::autograd::{self, Derivative};
+use super::autograd::{Derivative};
 use super::functional as F;
 use super::functional;
 use super::numeric::*;

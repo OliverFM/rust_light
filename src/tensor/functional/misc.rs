@@ -1,6 +1,6 @@
 use super::super::numeric::*;
 use crate::tensor::autograd::Derivative;
-use crate::tensor::utils::{global_index, tensor_index, ElementIterator};
+use crate::tensor::utils::{global_index, ElementIterator};
 
 use crate::tensor::{autograd, RawTensor, RcTensor, TensorLike};
 use std::ops::Deref;

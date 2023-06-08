@@ -1,4 +1,4 @@
-use super::functional;
+
 use super::numeric::*;
 use super::utils::IndexIterator;
 use super::{RawTensor, RcTensor, SliceRange, TensorView};
