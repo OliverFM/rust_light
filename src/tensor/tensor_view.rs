@@ -1,7 +1,7 @@
 use super::numeric::*;
 use crate::tensor::functional;
 use crate::tensor::utils::ElementIterator;
-use crate::tensor::{RcTensor, Scalar, SliceRange, TensorLike, TensorLikePrivate};
+use crate::tensor::{IndexType, RcTensor, Scalar, SliceRange, TensorLike, TensorLikePrivate};
 
 use std::cmp::PartialEq;
 use std::ops::{Deref, Index};
@@ -30,7 +30,7 @@ where
 {
     type Output = T;
 
-    fn index(&self, index: &Vec<usize>) -> &Self::Output {
+    fn index(&self, index: IndexType) -> &Self::Output {
         self.tensor
             .get_with_offset(index, &self.view.offset)
             .unwrap()
@@ -122,7 +122,7 @@ where
         Scalar::from(v)
     }
 
-    fn get(&self, index: &Vec<usize>) -> Result<&T, String> {
+    fn get(&self, index: IndexType) -> Result<&T, String> {
         let idx = self
             .tensor
             .global_index(index, Some(&self.view.offset))

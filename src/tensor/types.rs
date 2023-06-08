@@ -8,3 +8,5 @@ use crate::tensor::RcTensor;
 pub type TensorList<T> = Vec<RcTensor<T>>;
 
 pub type Scalar<T> = RcTensor<T>;
+
+pub type IndexType<'a> = &'a Vec<usize>; // should be &[usize]

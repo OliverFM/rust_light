@@ -14,8 +14,8 @@ pub(in crate::tensor) struct Derivative<T: Numeric> {
 
 impl<T: Numeric> Derivative<T> {
     pub fn new(
-        inputs: Vec<RcTensor<T>>,
-        jacobian_vector_product: fn(Vec<RcTensor<T>>, Vec<RcTensor<T>>) -> Vec<RcTensor<T>>,
+        inputs: TensorList<T>,
+        jacobian_vector_product: fn(TensorList<T>, TensorList<T>) -> TensorList<T>,
         // TODO: switch this to working on views.
         // OR just force everythng to be flat... and set to the same shape at the end...
     ) -> Derivative<T> {

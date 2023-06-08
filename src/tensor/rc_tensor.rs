@@ -12,7 +12,7 @@ use super::raw_tensor::*;
 use super::tensor_like::*;
 use super::tensor_view::*;
 use crate::tensor::functional;
-use crate::tensor::{Scalar};
+use crate::tensor::{IndexType, Scalar};
 
 // fn ones<T: Numeric>(tensors: Vec<RcTensor<T>>) -> RcTensor<T> {
 //     assert_eq!(tensors.len(), 1);
@@ -95,13 +95,13 @@ impl<T: Numeric> RcTensor<T> {
     /// tensor.get(&vec![0,0,10, 0,1])
     /// );
     /// ```
-    fn get(&self, index: &Vec<usize>) -> Result<&T, String> {
+    fn get(&self, index: IndexType) -> Result<&T, String> {
         self.deref().get(index)
     }
 
     pub(in crate::tensor) fn get_with_offset(
         &self,
-        index: &Vec<usize>,
+        index: IndexType,
         offset: &Vec<SliceRange>,
     ) -> Result<&T, String> {
         self.deref().get_with_offset(index, offset)
@@ -147,7 +147,7 @@ where
         self.deref().shape()
     }
 
-    fn get(&self, index: &Vec<usize>) -> Result<&Self::Elem, String> {
+    fn get(&self, index: IndexType) -> Result<&Self::Elem, String> {
         self.deref().get(index)
     }
 
