@@ -12,6 +12,7 @@ use super::raw_tensor::*;
 use super::tensor_like::*;
 use super::tensor_view::*;
 use crate::tensor::functional;
+use crate::tensor::{Scalar, TensorList};
 
 // fn ones<T: Numeric>(tensors: Vec<RcTensor<T>>) -> RcTensor<T> {
 //     assert_eq!(tensors.len(), 1);
@@ -20,9 +21,6 @@ use crate::tensor::functional;
 
 #[derive(Debug, PartialEq, Clone)]
 pub struct RcTensor<T: Numeric>(pub(super) Rc<RawTensor<T>>);
-
-// TODO: make this a separate struct
-pub type Scalar<T> = RcTensor<T>;
 
 impl<T> Deref for RcTensor<T>
 where
