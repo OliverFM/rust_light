@@ -1,6 +1,6 @@
 use super::numeric::*;
-use super::utils::IndexIterator;
 use super::{IndexType, RawTensor, RcTensor, SliceRange, TensorView};
+use crate::tensor::utils::IndexIterator;
 use std::ops::Deref;
 
 pub trait TensorLikePublic: TensorLike {}
@@ -57,7 +57,7 @@ pub trait TensorLike: TensorLikePrivate + std::fmt::Debug {
 
     fn deep_clone(&self) -> RcTensor<Self::Elem> {
         let mut raw_tensor = self.to_tensor().0.deref().clone();
-        raw_tensor.derivative = None;
+        raw_tensor.grad_fn = None;
         raw_tensor.zero_grad();
         RcTensor::from_raw(raw_tensor)
     }
@@ -119,6 +119,8 @@ pub trait TensorLike: TensorLikePrivate + std::fmt::Debug {
     {
         *self.shape() == **other.shape()
     }
+
+    fn count(&self) -> usize;
 
     fn broadcastable<V: Deref<Target = Vec<usize>>>(&self, new_shape: V) -> bool {
         // TODO: test this!

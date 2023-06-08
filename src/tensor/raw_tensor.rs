@@ -46,7 +46,7 @@ where
     pub(in crate::tensor) array: Vec<T>, // later on, I will need unsafe code to replace this with a statically sized type
     pub(in crate::tensor) shape: Vec<usize>, // TODO: convert to let this be a slice
     pub(in crate::tensor) grad: RefCell<Option<RcTensor<T>>>, // TODO: think about the best representation here
-    pub(in crate::tensor) derivative: Option<Derivative<T>>,
+    pub(in crate::tensor) grad_fn: Option<Derivative<T>>,
 }
 
 impl<T: Numeric> PartialEq for RawTensor<T> {
@@ -71,7 +71,7 @@ where
             shape: vec![],
             grad: RefCell::new(None),
             array: vec![],
-            derivative: None,
+            grad_fn: None,
         }
     }
 }
@@ -190,7 +190,13 @@ where
         for dim in shape.iter() {
             len *= dim;
         }
-        assert_eq!(len, array.len());
+        assert_eq!(
+            len,
+            array.len(),
+            "Attempted to create a tensor with array.len()={}, but expected lenght: {len}
+            this is because shape is: {shape:?}",
+            array.len()
+        );
         RawTensor {
             array,
             shape,
@@ -203,7 +209,7 @@ where
     //     TensorView::new(tensor, shape)
     // }
 
-    fn set(&mut self, index: IndexType, value: T) -> Result<(), String> {
+    pub(in crate::tensor) fn set(&mut self, index: IndexType, value: T) -> Result<(), String> {
         match self.global_index(index, None) {
             Ok(global_idx) => {
                 self.array[global_idx] = value;
@@ -342,6 +348,10 @@ where
         self
     }
 
+    fn count(&self) -> usize {
+        self.array.len()
+    }
+
     fn to_tensor(&self) -> RcTensor<Self::Elem> {
         RcTensor::from_raw(self.clone())
     }
@@ -393,34 +403,7 @@ where
     /// );
     /// ```
     fn add(self, right: &U) -> Self::Output {
-        assert!(self.broadcastable(right.shape())); // TODO: figure out broadcasting
-        let length = max(right.shape().len(), self.shape.len());
-        let mut max_shape = Vec::with_capacity(length);
-
-        // TODO: consider getting rid of itertools
-        for pair in self
-            .shape
-            .iter()
-            .rev()
-            .zip_longest(right.tensor().shape().iter().rev())
-            .rev()
-        {
-            let dim = match pair {
-                Both(&l, &r) => max(l, r),
-                Left(&l) => l,
-                Right(&r) => r,
-            };
-            max_shape.push(dim);
-        }
-        let index_iter = IndexIterator::new(max_shape.clone());
-        let mut result = RawTensor::new_with_filler(max_shape.clone(), T::zero());
-        for idx in index_iter {
-            let v = self[&idx] + *(*right).get(&idx).unwrap();
-            if let Err(e) = result.set(&idx, v) {
-                panic!("{}", e)
-            }
-        }
-        result
+        functional::add_raw(self, right)
     }
 }
 

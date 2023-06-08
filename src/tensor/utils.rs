@@ -2,6 +2,8 @@ use crate::tensor::numeric::Numeric;
 use crate::tensor::SliceRange;
 use crate::tensor::TensorLike;
 
+use std::ops::Deref;
+
 pub struct ElementIterator<T, U, V>
 where
     U: Deref<Target = V>,
@@ -41,7 +43,7 @@ where
             let &elem = self.tensor_like.get(&self.index).unwrap();
             return Some(elem);
         }
-        if increment_index(&mut self.index, self.tensor_like.shape()) {
+        if increment_index(&mut self.index, &self.tensor_like.shape()[..]) {
             let &elem = self.tensor_like.get(&self.index).unwrap();
             return Some(elem);
         }
@@ -89,15 +91,14 @@ impl Iterator for IndexIterator {
             self.first = false;
             return Some(self.index.clone());
         }
-        if increment_index(&mut self.index, &self.dimensions) {
+        if increment_index(&mut self.index, &self.dimensions[..]) {
             return Some(self.index.clone());
         }
         None
     }
 }
 
-use std::ops::Deref;
-pub fn increment_index<V: Deref<Target = Vec<usize>>>(index: &mut [usize], shape: V) -> bool {
+pub(crate) fn increment_index<V: Deref<Target = [usize]>>(index: &mut [usize], shape: V) -> bool {
     let mut carry = 1;
     for i in (0..index.len()).rev() {
         let v = index[i];
@@ -274,7 +275,7 @@ fn test_increment_index() {
         [1, 2, 1].to_vec(),
     ];
     for expected_idx in indices.into_iter() {
-        let valid = increment_index(&mut index, &dimensions);
+        let valid = increment_index(&mut index, &dimensions[..]);
         assert!(valid);
         assert_eq!(index, expected_idx);
     }
