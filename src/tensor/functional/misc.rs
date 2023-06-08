@@ -103,7 +103,7 @@ where
 /// So we need to have some map ø(i,j)->k where i,j are matrix coords, and k is the param vector
 /// coords
 /// need to compute jacobians[0] @ J_A, jacobians[0] @ J_B with J_A being a matrix
-pub(crate) fn bmm_jvp_left_only<T: Numeric>(
+pub(crate) fn bmm_jvp<T: Numeric>(
     inputs: Vec<RcTensor<T>>,
     jacobians: Vec<RcTensor<T>>,
 ) -> Vec<RcTensor<T>> {
@@ -158,8 +158,6 @@ pub(crate) fn bmm_jvp_left_only<T: Numeric>(
     for i in 0..inputs[0].shape()[0] {
         for k in 0..inputs[0].shape()[1] {
             for j in 0..inputs[1].shape()[1] {
-                // sum_h jacobians[i, h] * J_A[h, j]
-                // loop through inner values of
                 let self_jac_idx0 = global_index(&vec![i, j], &bmm_output_shape, None).unwrap();
                 let left_jac_idx1 = global_index(&vec![i, k], inputs[0].shape(), None).unwrap(); // for J_A
                 let right_jac_idx1 = global_index(&vec![k, j], inputs[1].shape(), None).unwrap(); // for J_A
@@ -195,9 +193,9 @@ pub(crate) fn bmm_jvp_left_only<T: Numeric>(
                             panic!("{e}")
                         }
                     };
-                    right_array[tmp_right] = left_array[tmp_right]
+                    right_array[tmp_right] = right_array[tmp_right]
                         + jacobians[0][&vec![input_jac_idx, self_jac_idx0]]
-                            * inputs[1][&vec![i, k]];
+                            * inputs[0][&vec![i, k]];
                 }
             }
         }
@@ -280,6 +278,7 @@ fn test_dot() {
 
 #[test]
 fn test_bmm_jvp() {
+    // for (matrix_a, matrix_b)
     let matrix_a = RcTensor::from([[1.0, 2.0], [3.0, 4.0]]);
     let matrix_b = RcTensor::from([[10.0, 3.0], [42.0, -7.0]]);
 
@@ -294,5 +293,30 @@ fn test_bmm_jvp() {
     assert_eq!(
         *matrix_b.get_grad().borrow().as_ref().unwrap(),
         expected_jvp_b
+    );
+}
+
+#[test]
+fn test_bmm_jvp_differing_shapes() {
+    let matrix_a = RcTensor::from([[1.0, 2.0], [3.0, 4.0], [123.4, 1e-3]]);
+    let matrix_b = RcTensor::from([[10.0, 1e-2, -12.0], [42.0, 3.142, -7.0]]);
+
+    // calculated by hand and checked against pytorch
+    let expected_jvp_a =
+        RcTensor::from([[-1.9900, 38.1420], [-1.9900, 38.1420], [-1.9900, 38.1420]]);
+    let expected_jvp_b = RcTensor::from([[127.4500, 127.4500, 127.4500], [6.0010, 6.0010, 6.0010]]);
+    matrix_a.bmm(&matrix_b).sum().backward();
+    assert!(
+        (matrix_a.get_grad().borrow().as_ref().unwrap() - &expected_jvp_a)
+            .sum()
+            .elem()
+            <= 1e-3
+    );
+
+    assert!(
+        (matrix_b.get_grad().borrow().as_ref().unwrap() - &expected_jvp_b)
+            .sum()
+            .elem()
+            <= 1e-3
     );
 }

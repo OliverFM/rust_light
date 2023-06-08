@@ -185,7 +185,7 @@ where
         let mut raw_tensor = functional::bmm_raw(self, right);
         raw_tensor.derivative = Some(Derivative::new(
             vec![self.clone(), right.to_tensor()],
-            functional::bmm_jvp_left_only,
+            functional::bmm_jvp,
         ));
         RcTensor::from_raw(raw_tensor)
     }
@@ -265,6 +265,19 @@ where
     }
 }
 
+impl<T, U, V> Sub<U> for RcTensor<T>
+where
+    T: Numeric + Neg,
+    U: TensorLike<Elem = T>,
+    for<'a> &'a U: Neg<Output = V>,
+    V: TensorLike<Elem = T>,
+{
+    type Output = RcTensor<T>;
+    fn sub(self, right: U) -> Self::Output {
+        RcTensor::from_raw(self.0.sub(&right))
+    }
+}
+
 impl<T, U, V> Mul<U> for RcTensor<T>
 where
     T: Numeric,
@@ -300,8 +313,7 @@ fn test_element_wise_multiplication() {
     dbg!("left={}, right={},", &left, &right);
     assert_eq!(&left * &right, RcTensor::from([7, 4, 24]));
 }
-// TODO: get this test to work: not sure why it doesn't work since RcTensor implements
-// Deref<RawTensor>
+
 #[test]
 fn test_element_wise_multiplication_on_rc_tensor_directly() {
     let left = RcTensor::from([1, 2, 3]);
