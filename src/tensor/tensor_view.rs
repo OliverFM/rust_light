@@ -130,6 +130,10 @@ where
         Ok(&self.tensor.array[idx])
     }
 
+    fn count(&self) -> usize {
+        self.view.shape.iter().product()
+    }
+
     fn slice(&self, offset: Vec<SliceRange>) -> TensorView<T> {
         TensorView::new(self.tensor(), offset)
     }

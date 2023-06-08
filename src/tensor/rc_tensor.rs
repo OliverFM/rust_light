@@ -40,7 +40,7 @@ impl<T: Numeric> RcTensor<T> {
             1,
             "Can only operate on tensors with exactly one element!"
         );
-        self.derivative
+        self.grad_fn
             .as_ref()
             .unwrap()
             .compute_jvp(vec![RcTensor::scalar(T::one())])
@@ -153,7 +153,7 @@ where
 
     fn sum(&self) -> Self::SumType {
         let mut raw_scalar = self.0.sum();
-        raw_scalar.derivative = Some(Derivative::new(vec![self.clone()], autograd::ones));
+        raw_scalar.grad_fn = Some(Derivative::new(vec![self.clone()], autograd::ones));
         Scalar::from_raw(raw_scalar)
     }
 
@@ -163,6 +163,10 @@ where
 
     fn to_tensor(&self) -> RcTensor<Self::Elem> {
         self.clone()
+    }
+
+    fn count(&self) -> usize {
+        self.0.array.len()
     }
 
     fn slice(&self, offset: Vec<SliceRange>) -> TensorView<T> {
@@ -181,7 +185,7 @@ where
         U: TensorLike<Elem = Self::Elem>,
     {
         let mut raw_tensor = functional::bmm_raw(self, right);
-        raw_tensor.derivative = Some(Derivative::new(
+        raw_tensor.grad_fn = Some(Derivative::new(
             vec![self.clone(), right.to_tensor()],
             functional::bmm_jvp,
         ));
@@ -229,9 +233,7 @@ where
 {
     type Output = RcTensor<T>;
     fn add(self, right: U) -> Self::Output {
-        let mut raw_tensor = self.0.deref().add(&*right);
-        raw_tensor.derivative = Some(Derivative::new(vec![self.to_tensor()], autograd::ones));
-        RcTensor::from_raw(raw_tensor)
+        functional::add(self, right)
     }
 }
 
@@ -245,7 +247,7 @@ where
     fn add(self, right: U) -> Self::Output {
         let mut raw_tensor = self.0.deref().add(&*right);
         // TODO: set derivative struct for right too
-        raw_tensor.derivative = Some(Derivative::new(vec![self.to_tensor()], autograd::ones));
+        raw_tensor.grad_fn = Some(Derivative::new(vec![self.to_tensor()], autograd::ones));
         RcTensor::from_raw(raw_tensor)
     }
 }

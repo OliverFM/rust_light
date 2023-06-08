@@ -6,7 +6,7 @@ use num::traits::real::Real;
 
 #[derive(Debug, PartialEq, Clone)]
 pub(in crate::tensor) struct Derivative<T: Numeric> {
-    inputs: Vec<RcTensor<T>>,
+    inputs: TensorList<T>,
     // TODO: remove the need to take ownership here
     /// signature: jvp(inputs, jacobians) -> jvp
     jacobian_vector_product: fn(TensorList<T>, TensorList<T>) -> TensorList<T>,
@@ -25,31 +25,6 @@ impl<T: Numeric> Derivative<T> {
         }
     }
 
-    // pub fn compute(&self) -> RcTensor<T> {
-    //     assert!(self.inputs.len() <= 1);
-    //     // f(g(h(x))) how do i set x.grad if we are now computing f'
-    //     // grad = f'(g(hx)) g'(h(x)) h'(x)
-    //     // f(g(h(x), z)) how do i set x.grad if we are now computing f'
-    //     let grad = if let Some(grads) = self.inputs[0].compute_grad() {
-    //         let input_grad: RcTensor<T> = grads;
-    //         let self_grad: RcTensor<T> =
-    //             (self.jacobian_vector_product)(self.inputs.clone())[0].clone();
-    //         // TODO: consider moving this logic into a generalised_mul function.
-    //         if self_grad.is_scalar() || self_grad.shape().iter().product::<usize>() == 1 {
-    //             assert!(
-    //                 input_grad.is_scalar() || input_grad.shape().iter().product::<usize>() == 1
-    //             );
-    //             self_grad * input_grad
-    //         } else {
-    //             self_grad.bmm(&input_grad)
-    //         }
-    //     } else {
-    //         (self.jacobian_vector_product)(self.inputs.clone())[0].clone()
-    //     };
-    //     println!("grad={:?}", &grad);
-    //     grad
-    // }
-
     /// Computes the product outer_grads @ JVP(self.input)
     /// Recursively expanding the JVP of the input with the chain rule
     /// e.g. for f(g(h(x))), jvp(1.0) = jvp(1.0 * f'(g(h(x))))
@@ -59,10 +34,16 @@ impl<T: Numeric> Derivative<T> {
         // f(g(h(x), z)) how do i set x.grad if we are now computing f'
         let self_grads = (self.jacobian_vector_product)(self.inputs.clone(), outer_grads);
         for (grad, input) in self_grads.iter().zip(self.inputs.iter()) {
+            dbg!(&grad, &input);
+            debug_assert_eq!(
+                grad.count(),
+                input.count(),
+                "grad and input must have the same number of elements"
+            );
             let shaped_grad = RcTensor::new(grad.0.array.clone(), input.shape().to_vec());
             input.update_grad(shaped_grad);
-            if let Some(d) = input.derivative.as_ref() {
-                d.compute_jvp(vec![grad.clone()])
+            if let Some(d) = input.grad_fn.as_ref() {
+                d.compute_jvp(vec![grad.clone()]);
             }
         }
     }
@@ -102,7 +83,7 @@ pub fn tanh<T: Numeric + Real>(tensor: &RcTensor<T>) -> RcTensor<T> {
         array.push(elem.tanh());
     }
     let mut raw_tensor = RawTensor::new(array, tensor.shape().clone());
-    raw_tensor.derivative = Some(Derivative::new(vec![tensor.clone()], tanh_derivative_outer));
+    raw_tensor.grad_fn = Some(Derivative::new(vec![tensor.clone()], tanh_derivative_outer));
     RcTensor::from_raw(raw_tensor)
 }
 
@@ -175,7 +156,7 @@ fn test_tanh_sets_grad() {
     let output_perturbed = tanh(&(&input + &RcTensor::scalar(epsilon))).sum();
     let numerical_derivative = &RcTensor::scalar(1.0 / epsilon) * &(&output_perturbed - &output);
     output
-        .derivative
+        .grad_fn
         .clone()
         .unwrap()
         .compute_jvp(vec![RcTensor::scalar(1.0 as f64)]);
@@ -193,7 +174,7 @@ fn test_multi_dimensional_tanh() {
     let output = tanh(&tanh(&input)).sum();
     let expected = RcTensor::from([[0.4792, 0.0000], [0.0028, 0.9803]]);
     output
-        .derivative
+        .grad_fn
         .clone()
         .unwrap()
         .compute_jvp(vec![RcTensor::scalar(1.0 as f64)]);

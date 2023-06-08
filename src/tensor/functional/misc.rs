@@ -1,9 +1,14 @@
 use super::super::numeric::*;
 use crate::tensor::autograd::Derivative;
-use crate::tensor::utils::{global_index, ElementIterator};
+use crate::tensor::utils::IndexIterator;
+use crate::tensor::utils::{global_index, increment_index, tensor_index_inplace, ElementIterator};
 
-use crate::tensor::{autograd, RawTensor, RcTensor, TensorLike};
+use crate::tensor::{autograd, IndexType, RawTensor, RcTensor, TensorLike, TensorList};
+use std::cmp::max;
 use std::ops::Deref;
+
+use itertools::EitherOrBoth::{Both, Left, Right};
+use itertools::Itertools;
 
 pub(crate) fn todo_backward<T: Numeric>(
     _inputs: Vec<RcTensor<T>>,
@@ -18,13 +23,98 @@ pub(crate) fn todo_deriv<T: Numeric>(
     todo!()
 }
 
+pub(crate) fn add<T, U1, U2, V1, V2>(left: U1, right: U2) -> RcTensor<T>
+where
+    T: Numeric,
+
+    U1: Deref<Target = V1> + std::fmt::Debug + Clone,
+    V1: TensorLike<Elem = T>,
+    U2: Deref<Target = V2> + Clone + std::fmt::Debug,
+    V2: TensorLike<Elem = T>,
+{
+    let left_res = left.to_tensor();
+    let right_res = right.to_tensor();
+    let mut raw_tensor = add_raw(left, right);
+    raw_tensor.grad_fn = Some(Derivative::new(vec![left_res, right_res], add_jvp));
+    RcTensor::from_raw(raw_tensor)
+}
+
+fn add_jvp<T: Numeric>(tensors: TensorList<T>, grads: TensorList<T>) -> TensorList<T> {
+    assert!(tensors.len() == 2);
+    assert!(grads.len() == 1);
+    assert!(grads[0].shape().len() == 2);
+    let (left, right) = (tensors[0].clone(), tensors[1].clone());
+    let diag_shape = max_shape(left.shape(), right.shape());
+    // let diag_length = diag_shape.iter().product::<usize>();
+    // let length_grad = grads[0].shape().iter().product::<usize>();
+
+    let mut left_array = vec![T::zero(); left.count()];
+    let mut right_array = vec![T::zero(); right.count()];
+    let mut idx = Vec::with_capacity(diag_shape.len());
+    let one = T::one();
+    while increment_index(&mut idx, &diag_shape[..]) {
+        let i = global_index(&idx, &left.shape(), None).unwrap();
+        left_array[i] += one;
+        let i = global_index(&idx, &right.shape(), None).unwrap();
+        right_array[i] += one;
+    }
+    let raw_left_grad = RawTensor::new(left_array, left.shape().to_vec());
+    let raw_right_grad = RawTensor::new(right_array, right.shape().to_vec());
+    dbg!(&raw_left_grad, &raw_right_grad);
+    vec![
+        RcTensor::from_raw(raw_left_grad),
+        RcTensor::from_raw(raw_right_grad),
+    ]
+}
+
+fn max_shape(left_shape: &[usize], right_shape: &[usize]) -> Vec<usize> {
+    let mut max_shape = Vec::with_capacity(max(left_shape.len(), right_shape.len()));
+
+    // TODO: consider getting rid of itertools
+    for pair in left_shape
+        .iter()
+        .rev()
+        .zip_longest(right_shape.iter().rev())
+        .rev()
+    {
+        let dim = match pair {
+            Both(&l, &r) => max(l, r),
+            Left(&l) => l,
+            Right(&r) => r,
+        };
+        max_shape.push(dim);
+    }
+    max_shape
+}
+pub(crate) fn add_raw<T, U1, U2, V1, V2>(left: U1, right: U2) -> RawTensor<T>
+where
+    T: Numeric,
+    U1: Deref<Target = V1> + std::fmt::Debug + Clone,
+    V1: TensorLike<Elem = T>,
+    U2: Deref<Target = V2> + Clone + std::fmt::Debug,
+    V2: TensorLike<Elem = T>,
+{
+    assert!(left.broadcastable(right.shape())); // TODO: figure out broadcasting
+    let length = max(right.shape().len(), left.shape().len());
+    let max_shape = max_shape(&left.shape()[..], &right.shape()[..]);
+    let index_iter = IndexIterator::new(max_shape.clone());
+    let mut result = RawTensor::new_with_filler(max_shape.clone(), T::zero());
+    for idx in index_iter {
+        let v = *left.deref().get(&idx).unwrap() + *right.deref().get(&idx).unwrap();
+        if let Err(e) = result.set(&idx, v) {
+            panic!("{}", e)
+        }
+    }
+    result
+}
+
 #[inline]
 pub(crate) fn dot_raw<T, U1, U2, V1, V2>(left: U1, right: U2) -> RawTensor<T>
 where
     T: Numeric,
     U1: Deref<Target = V1> + std::fmt::Debug + Clone,
     V1: TensorLike<Elem = T>,
-    U2: Deref<Target = V2> + Clone + std::fmt::Debug,
+    U2: Deref<Target = V2> + std::fmt::Debug + Clone,
     V2: TensorLike<Elem = T>,
 {
     //! generalised dot product: returns to acculumulated sum of the elementwise product.
@@ -264,7 +354,7 @@ where
     T: Numeric,
 {
     let mut raw_tensor = dot_raw(left, right);
-    raw_tensor.derivative = Some(Derivative::new(vec![left.clone(), right.clone()], dot_jvp));
+    raw_tensor.grad_fn = Some(Derivative::new(vec![left.clone(), right.clone()], dot_jvp));
 
     RcTensor::from_raw(raw_tensor)
 }
@@ -319,4 +409,26 @@ fn test_bmm_jvp_differing_shapes() {
             .elem()
             <= 1e-3
     );
+}
+
+#[test]
+fn test_add_grad() {
+    for (left, right, left_grad, right_grad) in vec![(
+        RcTensor::from([1.0, 2.0, 3.0]),
+        RcTensor::from([10.0, 42.0, -5.0]),
+        RcTensor::from([1.0, 1.0, 1.0]),
+        RcTensor::from([1.0, 1.0, 1.0]),
+    )] {
+        (&left + &right).sum().backward();
+
+        let computed_grad = left.get_grad().borrow().as_ref().unwrap().deref().clone();
+        let diff = &computed_grad - &left_grad;
+        dbg!(&computed_grad, &left_grad, &diff);
+        assert!(diff.sum().elem() <= 1e-3);
+
+        let computed_grad = right.get_grad().borrow().as_ref().unwrap().deref().clone();
+        let diff = &computed_grad - &left_grad;
+        dbg!(&computed_grad, &right_grad, &diff);
+        assert!(diff.sum().elem() <= 1e-3);
+    }
 }
