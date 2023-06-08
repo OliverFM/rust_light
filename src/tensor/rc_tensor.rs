@@ -12,7 +12,7 @@ use super::raw_tensor::*;
 use super::tensor_like::*;
 use super::tensor_view::*;
 use crate::tensor::functional;
-use crate::tensor::{Scalar, TensorList};
+use crate::tensor::{Scalar};
 
 // fn ones<T: Numeric>(tensors: Vec<RcTensor<T>>) -> RcTensor<T> {
 //     assert_eq!(tensors.len(), 1);

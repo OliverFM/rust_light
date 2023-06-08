@@ -1,4 +1,4 @@
-use crate::tensor::{Numeric, RcTensor, TensorLike, TensorList};
+use crate::tensor::{Numeric, TensorList};
 
 pub(crate) mod private {
     pub trait Private {}
