@@ -1,5 +1,6 @@
 // use rust_light as rlt;
 use rust_light::nn::linear::Linear;
+use rust_light::optim::sgd::sgd_step;
 use rust_light::tensor::{Numeric, RcTensor, TensorLike};
 
 fn main() {
@@ -15,7 +16,7 @@ fn main() {
     layer.bias.grad();
 
     let step_size = RcTensor::scalar(1e-3);
-    layer.weights = layer.weights.clone() - &step_size * &layer.weights.grad();
+    sgd_step(&mut layer, step_size);
 
     println!("res={res:?}");
     println!("\n\nsuccess!!!")

@@ -1,14 +1,14 @@
 use super::super::numeric::*;
 use crate::tensor::autograd::Derivative;
-use crate::tensor::utils::IndexIterator;
-use crate::tensor::utils::{global_index, increment_index, ElementIterator};
 
-use crate::tensor::{autograd, RawTensor, RcTensor, TensorLike, TensorList};
-use std::cmp::max;
+use crate::tensor::utils::{global_index, ElementIterator};
+
+use crate::tensor::{autograd, RawTensor, RcTensor, TensorLike};
+
 use std::ops::Deref;
 
-use itertools::EitherOrBoth::{Both, Left, Right};
-use itertools::Itertools;
+
+
 
 pub(crate) fn todo_backward<T: Numeric>(
     _inputs: Vec<RcTensor<T>>,

@@ -29,7 +29,7 @@ where
     }
     let mut raw_tensor = RawTensor::new(array, tensor.shape().clone());
     raw_tensor.grad_fn = Some(Derivative::new(
-        vec![tensor.clone()],
+        vec![tensor],
         tanh_derivative_outer,
         format!("tanh, file: {}, line: {}", file!(), line!(),),
     ));
@@ -104,6 +104,14 @@ where
         format!("add, file: {}, line: {}", file!(), line!(),),
     ));
     RcTensor::from_raw(raw_tensor)
+}
+
+pub(crate) fn jvp_from_diagonal<T: Numeric>(
+    diagonal: RcTensor<T>,
+    broadcast_shape: Option<Vec<usize>>,
+    grad: RcTensor<T>,
+) -> RcTensor<T> {
+    todo!();
 }
 
 fn add_jvp<T: Numeric>(tensors: TensorList<T>, grads: TensorList<T>) -> TensorList<T> {

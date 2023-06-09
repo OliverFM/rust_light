@@ -1,8 +1,8 @@
 use crate::tensor::numeric::*;
 
-use crate::tensor::utils::ElementIterator;
+
 use crate::tensor::{RawTensor, RcTensor, TensorLike, TensorList};
-use num::traits::real::Real;
+
 
 #[derive(Debug, PartialEq, Clone)]
 pub(in crate::tensor) struct Derivative<T: Numeric> {
