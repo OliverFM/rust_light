@@ -113,6 +113,10 @@ impl<T: Numeric> RcTensor<T> {
     {
         self.0.grad.clone()
     }
+
+    pub fn grad(&self) -> RcTensor<T> {
+        self.get_grad().borrow().as_ref().unwrap().clone()
+    }
 }
 
 impl<T> TensorLikePrivate for RcTensor<T> where T: Numeric {}
@@ -153,7 +157,11 @@ where
 
     fn sum(&self) -> Self::SumType {
         let mut raw_scalar = self.0.sum();
-        raw_scalar.grad_fn = Some(Derivative::new(vec![self.clone()], autograd::ones));
+        raw_scalar.grad_fn = Some(Derivative::new(
+            vec![self.clone()],
+            autograd::ones,
+            format!("sum, file: {}, line: {}", file!(), line!(),),
+        ));
         Scalar::from_raw(raw_scalar)
     }
 
@@ -188,6 +196,7 @@ where
         raw_tensor.grad_fn = Some(Derivative::new(
             vec![self.clone(), right.to_tensor()],
             functional::bmm_jvp,
+            format!("bmm_rc, file: {}, line: {}", file!(), line!(),),
         ));
         RcTensor::from_raw(raw_tensor)
     }
@@ -245,10 +254,7 @@ where
 {
     type Output = RcTensor<T>;
     fn add(self, right: U) -> Self::Output {
-        let mut raw_tensor = self.0.deref().add(&*right);
-        // TODO: set derivative struct for right too
-        raw_tensor.grad_fn = Some(Derivative::new(vec![self.to_tensor()], autograd::ones));
-        RcTensor::from_raw(raw_tensor)
+        functional::add(self, right)
     }
 }
 

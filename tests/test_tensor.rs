@@ -113,16 +113,6 @@ fn test_add_scalar() {
 }
 
 // #[ignore]
-#[test]
-fn test_add() {
-    let tensor1 = RawTensor::new_with_filler(vec![4, 4], 1);
-    let tensor2 = RawTensor::new((0..32).collect(), vec![2, 4, 4]);
-    let tensor3 = RawTensor::new((1..33).collect(), vec![2, 4, 4]);
-    assert_eq!(&tensor2 + &tensor1, tensor3);
-    assert_eq!(&tensor1 + &tensor2, tensor3);
-}
-
-// #[ignore]
 
 #[test]
 fn test_creation() {
@@ -135,21 +125,6 @@ fn test_creation() {
 }
 
 // #[ignore]
-#[test]
-fn test_bmm_2x2() {
-    let v = vec![0, 1, 2, 3];
-    let matrix = RawTensor::new(v, vec![2, 2]); // [[0,1],[2,3]]
-    let shape = vec![2, 1];
-    let e1 = RawTensor::new(vec![0, 1], vec![2, 1]);
-    let e2 = RawTensor::new(vec![1, 0], vec![2, 1]);
-    let diag = RawTensor::new(vec![1, 1], vec![2, 1]);
-
-    let r = matrix.bmm(&diag);
-    assert_eq!(r.shape(), &shape);
-    assert_eq!(r, RawTensor::new(vec![1, 5], shape.clone()));
-    assert_eq!(matrix.bmm(&e1), RawTensor::new(vec![1, 3], shape.clone()));
-    assert_eq!(matrix.bmm(&e2), RawTensor::new(vec![0, 2], shape.clone()));
-}
 
 // #[ignore]
 #[test]

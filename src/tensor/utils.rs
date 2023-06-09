@@ -180,12 +180,16 @@ pub(in crate::tensor) fn global_index(
     offset: Option<&Vec<SliceRange>>,
 ) -> Result<usize, String> {
     if index.len() < shape.len() {
-        // TODO: allow this case as long as extra dims are 1.
-        return Err(format!(
-            "shapes do not match: self.shape={:?}, index={:?}
-                Need index to be at least as long as shape.",
-            shape, index,
-        ));
+        for &dim in &shape[..shape.len() - index.len()] {
+            if dim > 1 {
+                return Err(format!(
+                    "shapes do not match: self.shape={:?}, index={:?}
+                    Need index to be at least as long as shape.
+                    dim={dim}",
+                    shape, index,
+                ));
+            }
+        }
     }
     let mut global_idx = 0;
     let mut multiplier = 1;
