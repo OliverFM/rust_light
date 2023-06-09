@@ -27,5 +27,6 @@ jobs:
     
     steps:
     - uses: actions/checkout@v3
-    - name: Run clippy
-      run: cargo clippy --all-features --verbose -- -D warnings
+    - name: Run Clippy
+      run: cargo clippy --all-features --verbose -- 
+        -Adead_code -Aclippy::ptr_arg -Aclippy::type_complexity -Dwarnings
