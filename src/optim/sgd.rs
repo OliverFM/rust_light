@@ -1,7 +1,7 @@
 use num::traits::real::Real;
 
 use crate::nn::linear::Linear;
-use crate::tensor::{Numeric, RcTensor, Scalar};
+use crate::tensor::{Numeric, Scalar};
 
 // struct Sgd<T: Numeric + Real> {
 //     step_size: Scalar<T>,

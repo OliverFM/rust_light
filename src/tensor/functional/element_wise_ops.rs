@@ -107,11 +107,43 @@ where
 }
 
 pub(crate) fn jvp_from_diagonal<T: Numeric>(
-    diagonal: RcTensor<T>,
-    broadcast_shape: Option<Vec<usize>>,
-    grad: RcTensor<T>,
+    diagonal: &RcTensor<T>,
+    jvp_shape: Option<&Vec<usize>>,
+    // input_parameter_shape: &Vec<usize>,
+    grad: &RcTensor<T>,
 ) -> RcTensor<T> {
-    todo!();
+    let jvp_shape = match jvp_shape {
+        Some(v) => v.to_vec(),
+        None => vec![grad.shape()[0], diagonal.count()],
+    };
+    assert_eq!(grad.shape()[0], jvp_shape[0]);
+    let mut array = vec![T::zero(); jvp_shape[0] * jvp_shape[1]];
+    let mut idx = vec![0; diagonal.shape().len()];
+    dbg!(&idx, diagonal.shape(), grad.shape());
+    loop {
+        // through all elements of the broadcast input
+        // noting that this is going along the diagonal of J_left,
+        // in their expanded broadcasted form
+        // We then compute grad @ diagonal
+        let jac_idx1 = global_index(&idx, diagonal.shape(), None).unwrap();
+        for jac_idx0 in 0..grad.shape()[0] {
+            let input_idx = global_index(&idx, diagonal.shape(), None).unwrap();
+            // let output_idx = global_index(&idx, &jvp_shape, None).unwrap();
+            let diag_jac_idx = global_index(&vec![jac_idx0, input_idx], &jvp_shape, None).unwrap();
+
+            let grad_val = grad[&vec![jac_idx0, jac_idx1]];
+            let diag_val = diagonal[&idx];
+            dbg!(&diag_jac_idx, &idx, &grad_val, &jac_idx0, &jac_idx1);
+
+            array[diag_jac_idx] += diag_val * grad_val; // TODO: multiply with diagonal
+        }
+        if !increment_index(&mut idx, &diagonal.shape()[..]) {
+            break;
+        }
+    }
+    let raw_left_grad = RawTensor::new(array, jvp_shape);
+
+    RcTensor::from_raw(raw_left_grad)
 }
 
 fn add_jvp<T: Numeric>(tensors: TensorList<T>, grads: TensorList<T>) -> TensorList<T> {
@@ -122,6 +154,8 @@ fn add_jvp<T: Numeric>(tensors: TensorList<T>, grads: TensorList<T>) -> TensorLi
     let grad = grads[0].clone();
     let broadcast_shape = max_shape(left.shape(), right.shape());
     let diag_length = broadcast_shape.iter().product::<usize>();
+    let diag_shape = vec![1, diag_length];
+    // let diag_shape = broadcast_shape;
     assert_eq!(
         grad.shape()[1],
         diag_length,
@@ -132,47 +166,15 @@ jacobians are not matrix multipliable",
     );
     // let length_grad = grads[0].shape().iter().product::<usize>();
 
-    let mut left_array = vec![T::zero(); left.count() * grad.shape()[0]];
-    let mut right_array = vec![T::zero(); right.count() * grad.shape()[0]];
-    let left_jvp_shape = vec![grad.shape()[0], left.count()];
     let right_jvp_shape = vec![grad.shape()[0], right.count()];
-
-    let mut idx = vec![0; broadcast_shape.len()];
+    let left_jvp_shape = vec![grad.shape()[0], left.count()];
 
     // TODO: multiply by grad!
-    dbg!(&broadcast_shape);
-    loop {
-        // through all elements of the broadcast inputs
-        // noting that this is going along the diagonal of J_left, and J_right
-        // in their expanded broadcasted form
-        // We then compute grad @ J_left and grad @ J_right
-        let jac_idx1 = global_index(&idx, &broadcast_shape, None).unwrap();
-        for jac_idx0 in 0..grad.shape()[0] {
-            let left_input_idx = global_index(&idx, left.shape(), None).unwrap();
-
-            let left_jac_idx =
-                global_index(&vec![jac_idx0, left_input_idx], &left_jvp_shape, None).unwrap();
-            let right_input_idx = global_index(&idx, right.shape(), None).unwrap();
-            let right_jac_idx =
-                global_index(&vec![jac_idx0, right_input_idx], &right_jvp_shape, None).unwrap();
-
-            let grad_val = grad[&vec![jac_idx0, jac_idx1]];
-            dbg!(&left_jac_idx, &right_jac_idx, &idx, &grad_val);
-
-            left_array[left_jac_idx] += grad_val;
-            right_array[right_jac_idx] += grad_val;
-        }
-        if !increment_index(&mut idx, &broadcast_shape[..]) {
-            break;
-        }
-    }
-    let raw_left_grad = RawTensor::new(left_array, left_jvp_shape);
-    let raw_right_grad = RawTensor::new(right_array, right_jvp_shape);
-    dbg!(&raw_left_grad, &raw_right_grad);
-    vec![
-        RcTensor::from_raw(raw_left_grad),
-        RcTensor::from_raw(raw_right_grad),
-    ]
+    dbg!(&left.shape(), &right.shape(), &diag_shape, &broadcast_shape);
+    let diag = RcTensor::new_with_filler(vec![1, diag_length], T::one());
+    let left_jvp = jvp_from_diagonal(&diag, Some(&left_jvp_shape), &grad);
+    let right_jvp = jvp_from_diagonal(&diag, Some(&right_jvp_shape), &grad);
+    vec![left_jvp, right_jvp]
 }
 
 fn max_shape(left_shape: &[usize], right_shape: &[usize]) -> Vec<usize> {
@@ -218,10 +220,11 @@ where
 
 #[test]
 fn test_add_jvp() {
-    for (case_number, (left, right, grad, expected)) in vec![
+    for (case_number, (left, right, grad, expected_left, expected_right)) in vec![
         (
             RcTensor::from([1.0, 2.0, 3.0]),
             RcTensor::from([1.0, 2.0, 3.0]),
+            RcTensor::from([[1.0, 1.0, 1.0]]),
             RcTensor::from([[1.0, 1.0, 1.0]]),
             RcTensor::from([[1.0, 1.0, 1.0]]),
         ),
@@ -230,10 +233,12 @@ fn test_add_jvp() {
             RcTensor::from([1.0, 2.0, 3.0, 0.1]),
             RcTensor::from([[1.0, 1.0, 1.0, 1.0]]),
             RcTensor::from([[1.0, 1.0, 1.0, 1.0]]),
+            RcTensor::from([[1.0, 1.0, 1.0, 1.0]]),
         ),
         (
             RcTensor::from([1.0, 2.0, 3.0]),
             RcTensor::from([1.0, 2.0, 3.0]),
+            RcTensor::from([[1.0, 2.0, 3.0]]),
             RcTensor::from([[1.0, 2.0, 3.0]]),
             RcTensor::from([[1.0, 2.0, 3.0]]),
         ),
@@ -241,6 +246,14 @@ fn test_add_jvp() {
             RcTensor::from([1.0, 2.0, 3.0]),
             RcTensor::from([1.0, 2.0, 3.0]),
             RcTensor::from([[1.0, 2.0, 3.0], [1.0, 2.0, 3.0]]),
+            RcTensor::from([[1.0, 2.0, 3.0], [1.0, 2.0, 3.0]]),
+            RcTensor::from([[1.0, 2.0, 3.0], [1.0, 2.0, 3.0]]),
+        ),
+        (
+            RcTensor::from([1.0]),
+            RcTensor::from([1.0, 2.0, 3.0]),
+            RcTensor::from([[1.0, 2.0, 3.0], [1.0, 2.0, 3.0]]),
+            RcTensor::from([[6.0], [6.0]]),
             RcTensor::from([[1.0, 2.0, 3.0], [1.0, 2.0, 3.0]]),
         ),
     ]
@@ -251,11 +264,12 @@ fn test_add_jvp() {
         let grad_shape = grad.shape().to_vec();
         let jvp = add_jvp(vec![left, right], vec![grad]);
         assert_eq!(
-            expected.shape(),
+            expected_left.shape(),
             &vec![grad_shape[0], count],
             "case_number: {case_number}"
         );
-        assert_eq!(jvp[0], expected, "case_number: {case_number}");
+        assert_eq!(jvp[0], expected_left, "case_number: {case_number}");
+        assert_eq!(jvp[1], expected_right, "case_number: {case_number}");
     }
 }
 
