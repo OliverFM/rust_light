@@ -218,6 +218,31 @@ where
     result
 }
 
+pub(crate) fn abs<T, U, V>(tensor_like: U) -> RcTensor<T>
+where
+    T: Numeric + Real,
+    U: Deref<Target = V> + std::fmt::Debug + Clone,
+    V: TensorLike<Elem = T>,
+{
+    todo!()
+}
+pub(crate) fn abs_raw<T, U, V>(tensor_like: U) -> RawTensor<T>
+where
+    T: Numeric + Real,
+    U: Deref<Target = V> + std::fmt::Debug + Clone,
+    V: TensorLike<Elem = T>,
+{
+    let shape = tensor_like.shape().to_vec();
+    let mut idx = vec![0; shape.len()];
+    let mut array: Vec<T> = Vec::with_capacity(shape.len());
+    for _ in 0..tensor_like.count() {
+        increment_index(&mut idx, &shape[..]);
+        let elem = (*tensor_like).get(&idx).unwrap();
+        array.push(elem.abs())
+    }
+    RawTensor::new(array, shape)
+}
+
 #[test]
 fn test_add_jvp() {
     for (case_number, (left, right, grad, expected_left, expected_right)) in vec![
