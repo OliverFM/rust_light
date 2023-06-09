@@ -125,7 +125,7 @@ pub(crate) fn jvp_from_diagonal<T: Numeric>(
         // noting that this is going along the diagonal of J_left,
         // in their expanded broadcasted form
         // We then compute grad @ diagonal
-        let jac_idx1 = global_index(&idx, &diagonal.shape(), None).unwrap();
+        let jac_idx1 = global_index(&idx, diagonal.shape(), None).unwrap();
         for jac_idx0 in 0..grad.shape()[0] {
             let input_idx = global_index(&idx, diagonal.shape(), None).unwrap();
             // let output_idx = global_index(&idx, &jvp_shape, None).unwrap();
