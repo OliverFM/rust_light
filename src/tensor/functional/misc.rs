@@ -1,14 +1,14 @@
 use super::super::numeric::*;
 use crate::tensor::autograd::Derivative;
-use crate::tensor::utils::IndexIterator;
-use crate::tensor::utils::{global_index, increment_index, tensor_index_inplace, ElementIterator};
 
-use crate::tensor::{autograd, IndexType, RawTensor, RcTensor, TensorLike, TensorList};
-use std::cmp::max;
+use crate::tensor::utils::{global_index, ElementIterator};
+
+use crate::tensor::{autograd, RawTensor, RcTensor, TensorLike};
+
 use std::ops::Deref;
 
-use itertools::EitherOrBoth::{Both, Left, Right};
-use itertools::Itertools;
+
+
 
 pub(crate) fn todo_backward<T: Numeric>(
     _inputs: Vec<RcTensor<T>>,
@@ -22,92 +22,6 @@ pub(crate) fn todo_deriv<T: Numeric>(
 ) -> Vec<RcTensor<T>> {
     todo!()
 }
-
-pub(crate) fn add<T, U1, U2, V1, V2>(left: U1, right: U2) -> RcTensor<T>
-where
-    T: Numeric,
-
-    U1: Deref<Target = V1> + std::fmt::Debug + Clone,
-    V1: TensorLike<Elem = T>,
-    U2: Deref<Target = V2> + Clone + std::fmt::Debug,
-    V2: TensorLike<Elem = T>,
-{
-    let left_res = left.to_tensor();
-    let right_res = right.to_tensor();
-    let mut raw_tensor = add_raw(left, right);
-    raw_tensor.grad_fn = Some(Derivative::new(vec![left_res, right_res], add_jvp));
-    RcTensor::from_raw(raw_tensor)
-}
-
-fn add_jvp<T: Numeric>(tensors: TensorList<T>, grads: TensorList<T>) -> TensorList<T> {
-    assert!(tensors.len() == 2);
-    assert!(grads.len() == 1);
-    assert!(grads[0].shape().len() == 2);
-    let (left, right) = (tensors[0].clone(), tensors[1].clone());
-    let diag_shape = max_shape(left.shape(), right.shape());
-    // let diag_length = diag_shape.iter().product::<usize>();
-    // let length_grad = grads[0].shape().iter().product::<usize>();
-
-    let mut left_array = vec![T::zero(); left.count()];
-    let mut right_array = vec![T::zero(); right.count()];
-    let mut idx = Vec::with_capacity(diag_shape.len());
-    let one = T::one();
-    while increment_index(&mut idx, &diag_shape[..]) {
-        let i = global_index(&idx, &left.shape(), None).unwrap();
-        left_array[i] += one;
-        let i = global_index(&idx, &right.shape(), None).unwrap();
-        right_array[i] += one;
-    }
-    let raw_left_grad = RawTensor::new(left_array, left.shape().to_vec());
-    let raw_right_grad = RawTensor::new(right_array, right.shape().to_vec());
-    dbg!(&raw_left_grad, &raw_right_grad);
-    vec![
-        RcTensor::from_raw(raw_left_grad),
-        RcTensor::from_raw(raw_right_grad),
-    ]
-}
-
-fn max_shape(left_shape: &[usize], right_shape: &[usize]) -> Vec<usize> {
-    let mut max_shape = Vec::with_capacity(max(left_shape.len(), right_shape.len()));
-
-    // TODO: consider getting rid of itertools
-    for pair in left_shape
-        .iter()
-        .rev()
-        .zip_longest(right_shape.iter().rev())
-        .rev()
-    {
-        let dim = match pair {
-            Both(&l, &r) => max(l, r),
-            Left(&l) => l,
-            Right(&r) => r,
-        };
-        max_shape.push(dim);
-    }
-    max_shape
-}
-pub(crate) fn add_raw<T, U1, U2, V1, V2>(left: U1, right: U2) -> RawTensor<T>
-where
-    T: Numeric,
-    U1: Deref<Target = V1> + std::fmt::Debug + Clone,
-    V1: TensorLike<Elem = T>,
-    U2: Deref<Target = V2> + Clone + std::fmt::Debug,
-    V2: TensorLike<Elem = T>,
-{
-    assert!(left.broadcastable(right.shape())); // TODO: figure out broadcasting
-    let length = max(right.shape().len(), left.shape().len());
-    let max_shape = max_shape(&left.shape()[..], &right.shape()[..]);
-    let index_iter = IndexIterator::new(max_shape.clone());
-    let mut result = RawTensor::new_with_filler(max_shape.clone(), T::zero());
-    for idx in index_iter {
-        let v = *left.deref().get(&idx).unwrap() + *right.deref().get(&idx).unwrap();
-        if let Err(e) = result.set(&idx, v) {
-            panic!("{}", e)
-        }
-    }
-    result
-}
-
 #[inline]
 pub(crate) fn dot_raw<T, U1, U2, V1, V2>(left: U1, right: U2) -> RawTensor<T>
 where
@@ -121,7 +35,7 @@ where
     assert!(left.same_shape(&right));
     let mut result = T::zero();
     for i in 0..left.tensor().array.len() {
-        result = result + left.tensor().array[i] * right.tensor().array[i];
+        result += left.tensor().array[i] * right.tensor().array[i];
     }
     RawTensor {
         array: vec![result],
@@ -167,9 +81,8 @@ where
                 for k in 0..right.shape()[0] {
                     left_index[left_index_len - 1] = k;
                     right_index[0] = k;
-                    val = val
-                        + *left.get(&left_index).unwrap().deref()
-                            * (*right.get(&right_index).unwrap().deref());
+                    val += *left.get(&left_index).unwrap().deref()
+                        * (*right.get(&right_index).unwrap().deref());
                 }
                 result.array.push(val);
             }
@@ -230,14 +143,18 @@ pub(crate) fn bmm_jvp<T: Numeric>(
 
     println!(
         "inputs[0].shape()={:?}, inputs[1].shape()={:?}, 
-        self_jacobian_shape={:?},
+        left_jacobian_shape={:?},
+        right_jacobian_shape={:?},
         left_output_shape={:?}
+        right_output_shape={:?}
         jacobians[0].shape()={:?}
         bmm_output_shape={:?}",
         inputs[0].shape(),
         inputs[1].shape(),
         &left_jacobian_shape,
+        &right_jacobian_shape,
         &left_output_shape,
+        &right_output_shape,
         jacobians[0].shape(),
         &bmm_output_shape,
     );
@@ -269,9 +186,8 @@ pub(crate) fn bmm_jvp<T: Numeric>(
                             panic!("{e}")
                         }
                     };
-                    left_array[tmp_left] = left_array[tmp_left]
-                        + jacobians[0][&vec![input_jac_idx, self_jac_idx0]]
-                            * inputs[1][&vec![k, j]];
+                    left_array[tmp_left] +=
+                        jacobians[0][&vec![input_jac_idx, self_jac_idx0]] * inputs[1][&vec![k, j]];
 
                     let tmp_right = match global_index(
                         &vec![input_jac_idx, right_jac_idx1],
@@ -283,9 +199,9 @@ pub(crate) fn bmm_jvp<T: Numeric>(
                             panic!("{e}")
                         }
                     };
-                    right_array[tmp_right] = right_array[tmp_right]
-                        + jacobians[0][&vec![input_jac_idx, self_jac_idx0]]
-                            * inputs[0][&vec![i, k]];
+                    println!("tmp_right={tmp_right:?}");
+                    right_array[tmp_right] +=
+                        jacobians[0][&vec![input_jac_idx, self_jac_idx0]] * inputs[0][&vec![i, k]];
                 }
             }
         }
@@ -354,7 +270,11 @@ where
     T: Numeric,
 {
     let mut raw_tensor = dot_raw(left, right);
-    raw_tensor.grad_fn = Some(Derivative::new(vec![left.clone(), right.clone()], dot_jvp));
+    raw_tensor.grad_fn = Some(Derivative::new(
+        vec![left.clone(), right.clone()],
+        dot_jvp,
+        format!("dot, file: {}, line: {}", file!(), line!(),),
+    ));
 
     RcTensor::from_raw(raw_tensor)
 }
@@ -431,4 +351,28 @@ fn test_add_grad() {
         dbg!(&computed_grad, &right_grad, &diff);
         assert!(diff.sum().elem() <= 1e-3);
     }
+}
+
+#[test]
+fn test_bmm_2x2() {
+    let v = vec![0, 1, 2, 3];
+    let matrix = RcTensor::new(v, vec![2, 2]); // [[0,1],[2,3]]
+    let shape = vec![2, 1];
+    let e1 = RcTensor::new(vec![0, 1], vec![2, 1]);
+    let e2 = RcTensor::new(vec![1, 0], vec![2, 1]);
+    let diag = RcTensor::new(vec![1, 1], vec![2, 1]);
+
+    let r = matrix.bmm(&diag);
+    assert_eq!(r.shape(), &shape);
+    assert_eq!(r, RcTensor::new(vec![1, 5], shape.clone()));
+    matrix.zero_grad();
+    let r = matrix.bmm(&e1);
+    r.sum().backward();
+    assert_eq!(r, RcTensor::new(vec![1, 3], shape.clone()));
+    matrix.grad();
+    matrix.zero_grad();
+    r.sum().backward();
+    let r = matrix.bmm(&e2);
+    matrix.grad();
+    assert_eq!(r, RcTensor::new(vec![0, 2], shape.clone()));
 }
