@@ -22,12 +22,7 @@ where
     V: TensorLike<Elem = T>,
 {
     let tensor = tensor_like.to_tensor();
-    let length = tensor.shape().iter().fold(1, |acc, x| acc * *x);
-    let mut array = Vec::with_capacity(length);
-    for elem in ElementIterator::new(&tensor) {
-        array.push(elem.tanh());
-    }
-    let mut raw_tensor = RawTensor::new(array, tensor.shape().clone());
+    let mut raw_tensor = generic_unary_op(&tensor, |t| t.tanh());
     raw_tensor.grad_fn = Some(Derivative::new(
         vec![tensor],
         tanh_derivative_outer,
@@ -47,6 +42,7 @@ fn tanh_derivative_outer<T: Numeric + Real>(
     vec![new_grad]
 }
 
+// TODO: switch to generic_unary_jvp
 fn tanh_derivative<T: Numeric + Real>(
     tensor: &RcTensor<T>,
     full_jacobian_output: bool,
@@ -72,18 +68,6 @@ fn tanh_derivative<T: Numeric + Real>(
         }
     }
     let result = RcTensor::new(array, vec![length, length]);
-    for i in 0..length {
-        for j in 0..length {
-            if i == j {
-                assert_eq!(
-                    result[&vec![i, j]],
-                    T::one() - tensor.0.array[i].tanh().powi(2)
-                );
-            } else {
-                assert_eq!(result[&vec![i, j]], T::zero());
-            };
-        }
-    }
     result
 }
 
@@ -152,10 +136,18 @@ fn add_jvp<T: Numeric>(tensors: TensorList<T>, grads: TensorList<T>) -> TensorLi
     assert!(grads[0].shape().len() == 2);
     let (left, right) = (tensors[0].clone(), tensors[1].clone());
     let grad = grads[0].clone();
+    generic_binop_jvp(left, right, grad, |_l, _r| T::one())
+}
+
+fn generic_binop_jvp<T: Numeric>(
+    left: RcTensor<T>,
+    right: RcTensor<T>,
+    grad: RcTensor<T>,
+    op_derivative: fn(T, T) -> T,
+) -> TensorList<T> {
     let broadcast_shape = max_shape(left.shape(), right.shape());
     let diag_length = broadcast_shape.iter().product::<usize>();
     let diag_shape = vec![1, diag_length];
-    // let diag_shape = broadcast_shape;
     assert_eq!(
         grad.shape()[1],
         diag_length,
@@ -169,9 +161,18 @@ jacobians are not matrix multipliable",
     let right_jvp_shape = vec![grad.shape()[0], right.count()];
     let left_jvp_shape = vec![grad.shape()[0], left.count()];
 
-    // TODO: multiply by grad!
     dbg!(&left.shape(), &right.shape(), &diag_shape, &broadcast_shape);
-    let diag = RcTensor::new_with_filler(vec![1, diag_length], T::one());
+    let mut array = Vec::with_capacity(diag_length);
+    let mut idx = vec![0; broadcast_shape.len()];
+    loop {
+        let (&l, &r) = (left.get(&idx).unwrap(), right.get(&idx).unwrap());
+        array.push(op_derivative(l, r));
+        if !increment_index(&mut idx, &broadcast_shape[..]) {
+            break;
+        }
+    }
+
+    let diag = RcTensor::new(array, diag_shape);
     let left_jvp = jvp_from_diagonal(&diag, Some(&left_jvp_shape), &grad);
     let right_jvp = jvp_from_diagonal(&diag, Some(&right_jvp_shape), &grad);
     vec![left_jvp, right_jvp]
@@ -196,7 +197,23 @@ fn max_shape(left_shape: &[usize], right_shape: &[usize]) -> Vec<usize> {
     }
     max_shape
 }
+
 pub(crate) fn add_raw<T, U1, U2, V1, V2>(left: U1, right: U2) -> RawTensor<T>
+where
+    T: Numeric,
+    U1: Deref<Target = V1> + std::fmt::Debug + Clone,
+    V1: TensorLike<Elem = T>,
+    U2: Deref<Target = V2> + Clone + std::fmt::Debug,
+    V2: TensorLike<Elem = T>,
+{
+    generic_binop_raw(left, right, |l, r| l + r)
+}
+
+pub(crate) fn generic_binop_raw<T, U1, U2, V1, V2>(
+    left: U1,
+    right: U2,
+    op: fn(T, T) -> T,
+) -> RawTensor<T>
 where
     T: Numeric,
     U1: Deref<Target = V1> + std::fmt::Debug + Clone,
@@ -210,7 +227,12 @@ where
     let index_iter = IndexIterator::new(max_shape.clone());
     let mut result = RawTensor::new_with_filler(max_shape, T::zero());
     for idx in index_iter {
-        let v = *left.deref().get(&idx).unwrap() + *right.deref().get(&idx).unwrap();
+        let (l, r) = (
+            *left.deref().get(&idx).unwrap(),
+            *right.deref().get(&idx).unwrap(),
+        );
+        let v = op(l, r);
+
         if let Err(e) = result.set(&idx, v) {
             panic!("{}", e)
         }
@@ -224,23 +246,82 @@ where
     U: Deref<Target = V> + std::fmt::Debug + Clone,
     V: TensorLike<Elem = T>,
 {
-    todo!()
+    let mut raw_tensor = abs_raw(tensor_like.clone());
+    raw_tensor.grad_fn = Some(Derivative::new(
+        vec![tensor_like.to_tensor()],
+        abs_jvp,
+        format!("abs, file: {}, line: {}", file!(), line!(),),
+    ));
+    RcTensor::from_raw(raw_tensor)
 }
+
+fn abs_jvp<T: Numeric + Sub<Output = T>>(
+    tensors: TensorList<T>,
+    grads: TensorList<T>,
+) -> TensorList<T> {
+    assert!(tensors.len() == 1);
+    assert!(grads.len() == 1);
+    assert!(grads[0].shape().len() == 2);
+    generic_unary_jvp(&tensors[0], &grads[0], |t| {
+        if t >= T::zero() {
+            T::one()
+        } else {
+            T::zero() - T::one()
+        }
+    })
+}
+
 pub(crate) fn abs_raw<T, U, V>(tensor_like: U) -> RawTensor<T>
 where
     T: Numeric + Real,
     U: Deref<Target = V> + std::fmt::Debug + Clone,
     V: TensorLike<Elem = T>,
 {
-    let shape = tensor_like.shape().to_vec();
-    let mut idx = vec![0; shape.len()];
-    let mut array: Vec<T> = Vec::with_capacity(shape.len());
-    for _ in 0..tensor_like.count() {
-        increment_index(&mut idx, &shape[..]);
-        let elem = (*tensor_like).get(&idx).unwrap();
-        array.push(elem.abs())
+    generic_unary_op(tensor_like, |t| t.abs())
+}
+
+fn generic_unary_jvp<T: Numeric>(
+    tensor: &RcTensor<T>,
+    grad: &RcTensor<T>,
+    op_derivative: fn(T) -> T,
+) -> TensorList<T> {
+    let diag_length = tensor.count();
+    let diag_shape = vec![1, diag_length];
+    let jvp_shape = vec![grad.shape()[0], diag_length];
+
+    let mut array = Vec::with_capacity(diag_length);
+    let mut idx = vec![0; tensor.shape().len()];
+    loop {
+        let &v = tensor.get(&idx).unwrap();
+        let d = op_derivative(v);
+        dbg!(&d);
+        array.push(d);
+        if !increment_index(&mut idx, &tensor.shape()[..]) {
+            break;
+        }
     }
-    RawTensor::new(array, shape)
+    let diag = RcTensor::new(array, diag_shape);
+    vec![jvp_from_diagonal(&diag, Some(&jvp_shape), &grad)]
+}
+
+pub fn generic_unary_op<T, U, V>(tensor_like: U, op: fn(T) -> T) -> RawTensor<T>
+where
+    T: Numeric + Real,
+    U: Deref<Target = V> + std::fmt::Debug + Clone,
+    V: TensorLike<Elem = T>,
+{
+    let tensor = tensor_like.to_tensor();
+    let shape = tensor_like.shape().to_vec();
+    let length = tensor.count();
+    let mut array = Vec::with_capacity(length);
+    let mut idx = vec![0; shape.len()];
+    for _ in 0..length {
+        let &elem = (*tensor_like).get(&idx).unwrap();
+        let v = op(elem);
+        array.push(v);
+        increment_index(&mut idx, &shape[..]);
+    }
+    RawTensor::new(array, tensor.shape().clone())
 }
 
 #[test]
@@ -435,4 +516,21 @@ fn test_add() {
     assert_eq!(&tensor2 + &tensor1, tensor3);
     assert_eq!(&tensor1 + &tensor2, tensor3);
     assert_eq!(tensor1 + tensor2, tensor3);
+}
+
+#[test]
+fn test_abs() {
+    let tensor = RcTensor::from([[-1.0, -2., 3.0], [-1e-3, -7e2, 1.2]]);
+    let expected = RcTensor::from([[1.0, 2., 3.0], [1e-3, 7e2, 1.2]]);
+    let expected_grad = RcTensor::from([[-1.0, -1.0, 1.0], [-1.0, -1.0, 1.0]]);
+    let res = tensor.abs();
+    res.sum().backward();
+    dbg!(&res, &expected);
+    dbg!(&res.0.array, &expected.0.array);
+    // let diff = &res - &expected;
+    for (&v, &ev) in res.0.array.iter().zip(expected.0.array.iter()) {
+        assert!(v >= 0., "v={v:?}");
+        assert!(v - ev < 1e-3 && ev - v < 1e-3, "v={v:?}, ev={ev:?}");
+    }
+    assert_eq!(tensor.grad(), expected_grad);
 }

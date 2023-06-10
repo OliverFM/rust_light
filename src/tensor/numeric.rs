@@ -7,7 +7,18 @@ pub use num::{One, Zero};
 pub trait FpNumeric: Numeric + Real + From<f32> {}
 
 pub trait Numeric:
-    Add + AddAssign + Copy + Clone + One + Mul + Sub + SubAssign + PartialEq + Zero + std::fmt::Debug
+    Add
+    + AddAssign
+    + Copy
+    + Clone
+    + One
+    + Mul
+    + Sub
+    + SubAssign
+    + PartialEq
+    + PartialOrd
+    + Zero
+    + std::fmt::Debug
 {
 }
 // https://stackoverflow.com/questions/42381185/specifying-generic-parameter-to-belong-to-a-small-set-of-types

@@ -1,12 +1,12 @@
-use std::rc::Rc;
+use num::traits::real::Real;
 
 use std::cell::RefCell;
 use std::cmp::PartialEq;
 use std::convert::From;
 use std::ops::{Add, Deref, Mul, Sub};
+use std::rc::Rc;
 
 use super::autograd::{self, Derivative};
-
 use super::numeric::*;
 use super::raw_tensor::*;
 use super::tensor_like::*;
@@ -33,6 +33,14 @@ where
     }
 }
 
+impl<T> RcTensor<T>
+where
+    T: Numeric + Real,
+{
+    pub fn abs(&self) -> Self {
+        functional::abs(self)
+    }
+}
 impl<T: Numeric> RcTensor<T> {
     pub fn backward(&self) {
         assert_eq!(
