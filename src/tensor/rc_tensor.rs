@@ -352,7 +352,16 @@ fn test_neg() {
 }
 
 #[test]
-fn test_add() {
+fn test_add_two_inputs() {
+    let tensor1 = RcTensor::from([1.0]);
+    let tensor2 = RcTensor::from([1.0]);
+    (&tensor1 + tensor2.clone()).backward();
+    assert_eq!(tensor1.grad(), RcTensor::from([1.0]));
+    assert_eq!(tensor2.grad(), RcTensor::from([1.0]));
+}
+
+#[test]
+fn test_add_3() {
     let tensor1 = RcTensor::from([1.0]);
     let tensor2 = RcTensor::from([1.0]);
     let tensor3 = RcTensor::from([1.0]);

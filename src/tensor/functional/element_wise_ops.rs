@@ -534,10 +534,13 @@ fn test_tanh_derivative() {
 }
 
 #[test]
-fn test_add() {
+fn test_add_functional() {
     let tensor1 = RcTensor::new_with_filler(vec![4, 4], 1);
     let tensor2 = RcTensor::new((0..32).collect(), vec![2, 4, 4]);
     let tensor3 = RcTensor::new((1..33).collect(), vec![2, 4, 4]);
+    (tensor2.clone() + tensor1.clone()).sum().backward();
+    tensor1.grad();
+
     assert_eq!(&tensor2 + &tensor1, tensor3);
     assert_eq!(&tensor1 + &tensor2, tensor3);
     assert_eq!(tensor1 + tensor2, tensor3);
