@@ -345,11 +345,23 @@ where
 }
 
 #[test]
-fn test_sub() {
+fn test_neg() {
     let tensor = RcTensor::from([1.0]);
     tensor.neg().backward();
     assert_eq!(tensor.grad(), RcTensor::from([-1.0]));
 }
+
+#[test]
+fn test_add() {
+    let tensor1 = RcTensor::from([1.0]);
+    let tensor2 = RcTensor::from([1.0]);
+    let tensor3 = RcTensor::from([1.0]);
+    (&tensor1.neg() + &(tensor2.clone() + tensor3.clone())).backward();
+    assert_eq!(tensor1.grad(), RcTensor::from([-1.0]));
+    assert_eq!(tensor2.grad(), RcTensor::from([1.0]));
+    assert_eq!(tensor3.grad(), RcTensor::from([1.0]));
+}
+
 #[test]
 fn test_element_wise_multiplication() {
     let left = RcTensor::from([1, 2, 3]);

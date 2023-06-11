@@ -14,6 +14,7 @@ fn main() {
 
     for i in 0..101 {
         let res = layer.forward(input.clone());
+        // maybe the issue is because expected has no grad?
         let loss = (&res - &expected).sum();
         // let loss = (&res).abs().sum();
         println!("loss={:?}", loss);

@@ -100,7 +100,7 @@ pub(crate) fn jvp_from_diagonal<T: Numeric>(
         Some(v) => v.to_vec(),
         None => vec![grad.shape()[0], diagonal.count()],
     };
-    let dim_0 = if grad.shape().len() == 0 {
+    let dim_0 = if grad.shape().is_empty() {
         1
     } else {
         grad.shape()[0]
@@ -144,7 +144,8 @@ pub(crate) fn jvp_from_diagonal<T: Numeric>(
 fn add_jvp<T: Numeric>(tensors: TensorList<T>, grads: TensorList<T>) -> TensorList<T> {
     assert!(tensors.len() == 2);
     assert!(grads.len() == 1);
-    assert!(grads[0].shape().len() == 2);
+    // if grads[0].shape().len() > 0
+    // assert!(grads[0].shape().len() == 2);
     let (left, right) = (tensors[0].clone(), tensors[1].clone());
     let grad = grads[0].clone();
     generic_binop_jvp(left, right, grad, |_l, _r| T::one())
@@ -159,18 +160,25 @@ fn generic_binop_jvp<T: Numeric>(
     let broadcast_shape = max_shape(left.shape(), right.shape());
     let diag_length = broadcast_shape.iter().product::<usize>();
     let diag_shape = vec![1, diag_length];
-    assert_eq!(
-        grad.shape()[1],
-        diag_length,
-        "grad is of shape {:?} sum has {:?} parameters,
+    if grad.shape().len() >= 2 {
+        assert_eq!(
+            grad.shape()[1],
+            diag_length,
+            "grad is of shape {:?} sum has {:?} parameters,
 jacobians are not matrix multipliable",
-        grad.shape(),
-        diag_length
-    );
+            grad.shape(),
+            diag_length
+        );
+    }
     // let length_grad = grads[0].shape().iter().product::<usize>();
 
-    let right_jvp_shape = vec![grad.shape()[0], right.count()];
-    let left_jvp_shape = vec![grad.shape()[0], left.count()];
+    let dim_0 = if grad.shape().is_empty() {
+        1
+    } else {
+        grad.shape()[0]
+    };
+    let right_jvp_shape = vec![dim_0, right.count()];
+    let left_jvp_shape = vec![dim_0, left.count()];
 
     //    dbg!(&left.shape(), &right.shape(), &diag_shape, &broadcast_shape);
     let mut array = Vec::with_capacity(diag_length);
@@ -299,7 +307,7 @@ pub(crate) fn generic_unary_jvp<T: Numeric>(
     dbg!(&tensor, &grad);
     let diag_length = tensor.count();
     let diag_shape = vec![1, diag_length];
-    let dim_0 = if grad.shape().len() == 0 {
+    let dim_0 = if grad.shape().is_empty() {
         1
     } else {
         grad.shape()[0]
