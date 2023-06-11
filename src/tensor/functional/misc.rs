@@ -7,9 +7,6 @@ use crate::tensor::{autograd, RawTensor, RcTensor, TensorLike};
 
 use std::ops::Deref;
 
-
-
-
 pub(crate) fn todo_backward<T: Numeric>(
     _inputs: Vec<RcTensor<T>>,
     _grads: Vec<RcTensor<T>>,
@@ -54,9 +51,10 @@ where
     V2: TensorLike<Elem = T>,
 {
     // assert!(2 <= self.shape().len() && self.shape().len() <= 3); // For now we can only do Batch matrix
-    dbg!(left.shape().to_vec());
+    dbg!(left.shape(), right.shape());
     assert!(2 <= left.shape().len()); // For now we can only do Batch matrix
     assert!(right.shape().len() == 2); // rhs must be a matrix
+                                       //
     assert!(left.shape()[left.shape().len() - 1] == right.shape()[right.shape().len() - 2]);
     let new_shape = if left.shape().len() == 2 {
         vec![1, left.shape()[0], right.shape()[1]]
@@ -117,7 +115,13 @@ pub(crate) fn bmm_jvp<T: Numeric>(
         jacobians.len()
     );
 
-    assert_eq!(inputs[0].shape()[1], inputs[1].shape()[0]);
+    assert_eq!(
+        inputs[0].shape()[1],
+        inputs[1].shape()[0],
+        "inputs[0].shape()={:?}, inputs[1].shape()={:?}",
+        inputs[0].shape(),
+        inputs[1].shape()
+    );
     let bmm_output_shape = vec![inputs[0].shape()[0], inputs[1].shape()[1]];
     let left_jacobian_shape = vec![
         bmm_output_shape[0] * bmm_output_shape[1],
@@ -191,7 +195,7 @@ pub(crate) fn bmm_jvp<T: Numeric>(
 
                     let tmp_right = match global_index(
                         &vec![input_jac_idx, right_jac_idx1],
-                        &left_output_shape,
+                        &right_output_shape,
                         None,
                     ) {
                         Ok(t) => t,
@@ -375,4 +379,33 @@ fn test_bmm_2x2() {
     let r = matrix.bmm(&e2);
     matrix.grad();
     assert_eq!(r, RcTensor::new(vec![0, 2], shape.clone()));
+}
+
+#[test]
+fn test_bmm_runs() {
+    use rand::{random, Rng};
+    for (left_shape, right_shape) in vec![
+        (vec![2, 2], vec![2, 2]),
+        (vec![2, 2], vec![2, 1]),
+        (vec![8, 2], vec![2, 1]),
+        // (vec![2, 8, 2], vec![2, 1]), // to get this to work we need to allow tensor
+        // views/reshaping
+    ] {
+        let length = (left_shape.iter().product());
+        let mut left_array: Vec<f32> = Vec::with_capacity(length);
+        for _ in 0..length {
+            left_array.push(random());
+        }
+        let left_array = left_array;
+        dbg!(&left_array, &left_shape, &length);
+        let length = (right_shape.iter().product());
+        let mut right_array: Vec<f32> = Vec::with_capacity(length);
+        for _ in 0..length {
+            right_array.push(random());
+        }
+
+        let left = RcTensor::new(left_array, left_shape);
+        let right = RcTensor::new(right_array, right_shape);
+        left.bmm(&right).sum().backward();
+    }
 }

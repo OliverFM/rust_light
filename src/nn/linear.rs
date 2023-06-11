@@ -1,4 +1,4 @@
-use std::ops::Deref;
+
 
 use num::traits::real::Real;
 
@@ -17,13 +17,10 @@ impl<T> Linear<T>
 where
     T: Numeric + Real,
 {
-    pub fn forward<U, V>(&self, batch_ref: U) -> RcTensor<T>
-    where
-        U: Deref<Target = V> + std::fmt::Debug + Clone,
-        V: TensorLike<Elem = T>,
-    {
+    pub fn forward(&self, batch_ref: RcTensor<T>) -> RcTensor<T> {
         let batch = batch_ref.to_tensor();
-        let y = self.weights.bmm(&batch);
+        // let y = self.weights.bmm(&batch);
+        let y = batch.bmm(&self.weights);
 
         (self.activation)(&y + &self.bias)
     }
@@ -56,13 +53,13 @@ where
 #[test]
 fn test_layer_no_grad() {
     let layer = Linear::new(
-        RcTensor::new_with_filler(vec![1, 2, 2], 1.0),
-        RcTensor::new_with_filler(vec![1, 2, 1], 1.0),
+        RcTensor::new_with_filler(vec![2, 2], 1.0),
+        RcTensor::new_with_filler(vec![1, 2], 1.0),
         None,
     );
-    let input = RcTensor::new(vec![1.0, 2.0], vec![2, 1]);
+    let input = RcTensor::new(vec![1.0, 2.0], vec![1, 2]);
     let res = layer.forward(input);
-    let expected = RcTensor::new(vec![4.0, 4.0], vec![1, 2, 1]);
+    let expected = RcTensor::new(vec![4.0, 4.0], vec![1, 2]);
 
     assert_eq!(res, expected);
 }
@@ -71,17 +68,16 @@ fn test_layer_no_grad() {
 fn test_layer() {
     let layer = Linear::new(
         RcTensor::from([[1.0, -2.0], [-1.1, 0.7]]),
-        RcTensor::new_with_filler(vec![1, 2, 1], 1.0),
+        RcTensor::new_with_filler(vec![1, 2], 1.0),
         None,
     );
-    let input = RcTensor::new(vec![1.0, 2.0], vec![2, 1]);
+    let input = RcTensor::new(vec![1.0, 2.0], vec![1, 2]);
     let res = layer.forward(input);
     res.sum().backward();
     layer.weights.grad();
     layer.bias.grad();
 }
 
-#[ignore]
 #[test]
 fn test_layer_batch_tensor() {
     // TODO: figure out how to update bmm to work correctly with autograd
