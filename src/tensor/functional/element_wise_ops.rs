@@ -67,8 +67,8 @@ fn tanh_derivative<T: Numeric + Real>(
             array.push(v);
         }
     }
-    let result = RcTensor::new(array, vec![length, length]);
-    result
+    
+    RcTensor::new(array, vec![length, length])
 }
 
 pub(crate) fn add<T, U1, U2, V1, V2>(left: U1, right: U2) -> RcTensor<T>
@@ -301,7 +301,7 @@ fn generic_unary_jvp<T: Numeric>(
         }
     }
     let diag = RcTensor::new(array, diag_shape);
-    vec![jvp_from_diagonal(&diag, Some(&jvp_shape), &grad)]
+    vec![jvp_from_diagonal(&diag, Some(&jvp_shape), grad)]
 }
 
 pub fn generic_unary_op<T, U, V>(tensor_like: U, op: fn(T) -> T) -> RawTensor<T>
