@@ -10,14 +10,22 @@ fn main() {
         None,
     );
     let input = RcTensor::new(vec![1.0, 2.0], vec![1, 2]);
-    let res = layer.forward(input);
-    res.sum().backward();
-    layer.weights.grad();
-    layer.bias.grad();
+    let expected = RcTensor::new(vec![-1.0, 1.0], vec![1, 2]);
 
-    let step_size = RcTensor::scalar(1e-3);
-    sgd_step(&mut layer, step_size);
+    for i in 0..101 {
+        let res = layer.forward(input.clone());
+        let loss = (&res - &expected).sum();
+        // let loss = (&res).abs().sum();
+        println!("loss={:?}", loss);
+        loss.backward();
 
-    println!("res={res:?}");
+        let step_size = RcTensor::scalar(1e-3);
+        sgd_step(&mut layer, step_size);
+        if i % 10 == 0 {
+            println!("res={}", res);
+        }
+        expected.zero_grad();
+    }
+
     println!("\n\nsuccess!!!")
 }

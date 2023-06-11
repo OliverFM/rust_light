@@ -1,5 +1,3 @@
-
-
 use std::cell::RefCell;
 use std::cmp::PartialEq;
 use std::convert::From;
@@ -171,6 +169,7 @@ where
             ..Default::default()
         }
     }
+
     pub fn new(array: Vec<T>, shape: Vec<usize>) -> RawTensor<T> {
         let mut len = 1;
         for dim in shape.iter() {
@@ -250,27 +249,13 @@ where
     }
 }
 
-impl<T> Neg for &RcTensor<T>
-where
-    T: Numeric + Neg<Output = T>,
-{
-    type Output = RcTensor<T>;
-    fn neg(self) -> Self::Output {
-        RcTensor::from_raw(self.0.neg())
-    }
-}
-
 impl<T> Neg for &RawTensor<T>
 where
     T: Numeric + Neg<Output = T>,
 {
     type Output = RawTensor<T>;
     fn neg(self) -> Self::Output {
-        let mut result = RawTensor::new_empty(self.shape.clone());
-        for &v in self.array.iter() {
-            result.array.push(-v);
-        }
-        result
+        functional::generic_unary_op(self, |x| -x)
     }
 }
 

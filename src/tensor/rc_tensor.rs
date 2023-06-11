@@ -127,6 +127,12 @@ impl<T: Numeric> RcTensor<T> {
     }
 }
 
+impl<T: Numeric> std::fmt::Display for RcTensor<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self.0.array)
+    }
+}
+
 impl<T> TensorLikePrivate for RcTensor<T> where T: Numeric {}
 impl<T> TensorLike for RcTensor<T>
 where
@@ -292,6 +298,24 @@ where
     }
 }
 
+impl<T> Neg for &RcTensor<T>
+where
+    T: Numeric + Neg<Output = T>,
+{
+    type Output = RcTensor<T>;
+    fn neg(self) -> Self::Output {
+        let mut raw_tensor = self.0.neg();
+        raw_tensor.grad_fn = Some(Derivative::new(
+            vec![self.clone()],
+            |tensors, grads| {
+                functional::generic_unary_jvp(&tensors[0], &grads[0], |_| T::one().neg())
+            },
+            format!("neg, file: {}, line: {}", file!(), line!(),),
+        ));
+        RcTensor::from_raw(raw_tensor)
+    }
+}
+
 impl<T, U, V> Mul<U> for RcTensor<T>
 where
     T: Numeric,
@@ -321,10 +345,16 @@ where
 }
 
 #[test]
+fn test_sub() {
+    let tensor = RcTensor::from([1.0]);
+    tensor.neg().backward();
+    assert_eq!(tensor.grad(), RcTensor::from([-1.0]));
+}
+#[test]
 fn test_element_wise_multiplication() {
     let left = RcTensor::from([1, 2, 3]);
     let right = RcTensor::from([7, 2, 8]);
-    dbg!("left={}, right={},", &left, &right);
+    //    dbg!("left={}, right={},", &left, &right);
     assert_eq!(&left * &right, RcTensor::from([7, 4, 24]));
 }
 
@@ -332,6 +362,6 @@ fn test_element_wise_multiplication() {
 fn test_element_wise_multiplication_on_rc_tensor_directly() {
     let left = RcTensor::from([1, 2, 3]);
     let right = RcTensor::from([7, 2, 8]);
-    dbg!("left={}, right={},", &left, &right);
+    //    dbg!("left={}, right={},", &left, &right);
     assert_eq!(left * right, RcTensor::from([7, 4, 24]));
 }

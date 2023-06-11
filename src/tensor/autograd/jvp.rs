@@ -1,8 +1,6 @@
 use crate::tensor::numeric::*;
 
-
 use crate::tensor::{RawTensor, RcTensor, TensorLike, TensorList};
-
 
 #[derive(Debug, PartialEq, Clone)]
 pub(in crate::tensor) struct Derivative<T: Numeric> {
@@ -35,7 +33,7 @@ impl<T: Numeric> Derivative<T> {
         // f(g(h(x), z)) how do i set x.grad if we are now computing f'
         let self_grads = (self.jacobian_vector_product)(self.inputs.clone(), outer_grads);
         for (grad, input) in self_grads.iter().zip(self.inputs.iter()) {
-            dbg!(&grad, &input, &self.debug_info);
+            //            dbg!(&grad, &input, &self.debug_info);
             debug_assert_eq!(
                 grad.count(),
                 input.count(),
@@ -74,5 +72,5 @@ pub fn ones<T: Numeric>(tensors: Vec<RcTensor<T>>, grads: Vec<RcTensor<T>>) -> V
     let length_1 = tensors[0].shape().iter().product::<usize>();
     let length_2 = grads[0].shape().iter().product::<usize>();
     let raw_tensor = RawTensor::new_with_filler(vec![length_2, length_1], T::one());
-    dbg!("sum_backward", vec![RcTensor::from_raw(raw_tensor)]).1
+    vec![RcTensor::from_raw(raw_tensor)]
 }

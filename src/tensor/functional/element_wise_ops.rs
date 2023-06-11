@@ -67,7 +67,7 @@ fn tanh_derivative<T: Numeric + Real>(
             array.push(v);
         }
     }
-    
+
     RcTensor::new(array, vec![length, length])
 }
 
@@ -100,24 +100,35 @@ pub(crate) fn jvp_from_diagonal<T: Numeric>(
         Some(v) => v.to_vec(),
         None => vec![grad.shape()[0], diagonal.count()],
     };
-    assert_eq!(grad.shape()[0], jvp_shape[0]);
+    let dim_0 = if grad.shape().len() == 0 {
+        1
+    } else {
+        grad.shape()[0]
+    };
+    assert_eq!(
+        dim_0,
+        jvp_shape[0],
+        "grad.shape()={:?}, jvp_shape={:?}",
+        grad.shape(),
+        jvp_shape
+    );
     let mut array = vec![T::zero(); jvp_shape[0] * jvp_shape[1]];
     let mut idx = vec![0; diagonal.shape().len()];
-    dbg!(&idx, diagonal.shape(), grad.shape());
+    //    dbg!(&idx, diagonal.shape(), grad.shape());
     loop {
         // through all elements of the broadcast input
         // noting that this is going along the diagonal of J_left,
         // in their expanded broadcasted form
         // We then compute grad @ diagonal
         let jac_idx1 = global_index(&idx, diagonal.shape(), None).unwrap();
-        for jac_idx0 in 0..grad.shape()[0] {
+        for jac_idx0 in 0..dim_0 {
             let input_idx = global_index(&idx, diagonal.shape(), None).unwrap();
             // let output_idx = global_index(&idx, &jvp_shape, None).unwrap();
             let diag_jac_idx = global_index(&vec![jac_idx0, input_idx], &jvp_shape, None).unwrap();
 
             let grad_val = grad[&vec![jac_idx0, jac_idx1]];
             let diag_val = diagonal[&idx];
-            dbg!(&diag_jac_idx, &idx, &grad_val, &jac_idx0, &jac_idx1);
+            //            dbg!(&diag_jac_idx, &idx, &grad_val, &jac_idx0, &jac_idx1);
 
             array[diag_jac_idx] += diag_val * grad_val; // TODO: multiply with diagonal
         }
@@ -161,7 +172,7 @@ jacobians are not matrix multipliable",
     let right_jvp_shape = vec![grad.shape()[0], right.count()];
     let left_jvp_shape = vec![grad.shape()[0], left.count()];
 
-    dbg!(&left.shape(), &right.shape(), &diag_shape, &broadcast_shape);
+    //    dbg!(&left.shape(), &right.shape(), &diag_shape, &broadcast_shape);
     let mut array = Vec::with_capacity(diag_length);
     let mut idx = vec![0; broadcast_shape.len()];
     loop {
@@ -280,21 +291,27 @@ where
     generic_unary_op(tensor_like, |t| t.abs())
 }
 
-fn generic_unary_jvp<T: Numeric>(
+pub(crate) fn generic_unary_jvp<T: Numeric>(
     tensor: &RcTensor<T>,
     grad: &RcTensor<T>,
     op_derivative: fn(T) -> T,
 ) -> TensorList<T> {
+    dbg!(&tensor, &grad);
     let diag_length = tensor.count();
     let diag_shape = vec![1, diag_length];
-    let jvp_shape = vec![grad.shape()[0], diag_length];
+    let dim_0 = if grad.shape().len() == 0 {
+        1
+    } else {
+        grad.shape()[0]
+    };
+    let jvp_shape = vec![dim_0, diag_length];
 
     let mut array = Vec::with_capacity(diag_length);
     let mut idx = vec![0; tensor.shape().len()];
     loop {
         let &v = tensor.get(&idx).unwrap();
         let d = op_derivative(v);
-        dbg!(&d);
+        //        dbg!(&d);
         array.push(d);
         if !increment_index(&mut idx, &tensor.shape()[..]) {
             break;
@@ -306,7 +323,7 @@ fn generic_unary_jvp<T: Numeric>(
 
 pub fn generic_unary_op<T, U, V>(tensor_like: U, op: fn(T) -> T) -> RawTensor<T>
 where
-    T: Numeric + Real,
+    T: Numeric,
     U: Deref<Target = V> + std::fmt::Debug + Clone,
     V: TensorLike<Elem = T>,
 {
@@ -383,7 +400,7 @@ fn test_add_jvp() {
 fn test_sum_backward() {
     let input = RcTensor::from([1.0, 2.0, 3.0]);
     input.sum().backward();
-    dbg!(&input.grad());
+    //    dbg!(&input.grad());
     assert_eq!(
         input.grad(),
         RcTensor::from([1.0, 1.0, 1.0]) // RcTensor::from([[1.0], [1.0], [1.0]])
@@ -402,9 +419,9 @@ fn test_tanh_sets_grad() {
         .clone()
         .unwrap()
         .compute_jvp(vec![RcTensor::scalar(1.0 as f64)]);
-    let input = dbg!(input);
+    //    let input = dbg!(input);
     let grad = input.get_grad().take().unwrap();
-    dbg!("input.get_grad()={:?}", input.get_grad().clone());
+    //    dbg!("input.get_grad()={:?}", input.get_grad().clone());
     let abs_diff = (&numerical_derivative - &grad).abs();
     assert!(abs_diff.sum().elem() <= 2e-4);
 }
@@ -435,30 +452,30 @@ fn test_tanh_twice_sets_grad() {
     let epsilon = 1e-12 as f64;
     let output = tanh(&tanh(&input)).sum();
     let output_perturbed = tanh(&tanh(&(&input + &RcTensor::scalar(epsilon)))).sum();
-    println!(
-        "output_perturbed=
-    {output_perturbed:?}"
-    );
-    println!(
-        "output=
-    {output:?}"
-    );
-    println!("____={:?}\n\n", RcTensor::scalar(epsilon));
+    // println!(
+    //     "output_perturbed=
+    // {output_perturbed:?}"
+    // );
+    // println!(
+    //     "output=
+    // {output:?}"
+    // );
+    // println!("____={:?}\n\n", RcTensor::scalar(epsilon));
     let numerical_derivative = &RcTensor::scalar(1.0 / epsilon) * &(&output_perturbed - &output);
     output.backward();
     let grad = input.get_grad().take().unwrap();
-    // dbg!("input.get_grad()={:?}", input.get_grad().clone());
+    //    // dbg!("input.get_grad()={:?}", input.get_grad().clone());
     let abs_diff = (&numerical_derivative - &grad).abs();
-    println!(
-        "numerical_derivative=
-    {numerical_derivative:?}\n\n"
-    );
-
-    println!(
-        "grad=
-        {grad:?}\n\n"
-    );
-    println!("abs_diff.sum()={:?}", abs_diff.sum());
+    // println!(
+    //     "numerical_derivative=
+    // {numerical_derivative:?}\n\n"
+    // );
+    //
+    // println!(
+    //     "grad=
+    //     {grad:?}\n\n"
+    // );
+    // println!("abs_diff.sum()={:?}", abs_diff.sum());
     assert!(abs_diff.sum().elem() <= 2e-4);
 }
 
@@ -525,8 +542,8 @@ fn test_abs() {
     let expected_grad = RcTensor::from([[-1.0, -1.0, 1.0], [-1.0, -1.0, 1.0]]);
     let res = tensor.abs();
     res.sum().backward();
-    dbg!(&res, &expected);
-    dbg!(&res.0.array, &expected.0.array);
+    //    dbg!(&res, &expected);
+    //    dbg!(&res.0.array, &expected.0.array);
     // let diff = &res - &expected;
     for (&v, &ev) in res.0.array.iter().zip(expected.0.array.iter()) {
         assert!(v >= 0., "v={v:?}");
