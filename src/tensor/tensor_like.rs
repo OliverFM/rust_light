@@ -12,7 +12,7 @@ pub use crate::tensor::private::TensorLikePrivate;
 
 pub trait TensorLike: TensorLikePrivate + std::fmt::Debug {
     type Elem: Numeric;
-    type ShapeReturn<'a>: Deref<Target = Vec<usize>>
+    type ShapeReturn<'a>: Deref<Target = Vec<usize>> + std::fmt::Debug
     where
         Self: 'a;
     type TensorRef<'a>: Deref<Target = RawTensor<Self::Elem>>

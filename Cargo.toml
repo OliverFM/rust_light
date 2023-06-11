@@ -8,3 +8,7 @@ edition = "2021"
 [dependencies]
 num="0.4.0"
 itertools="0.10.5"
+
+
+[dev-dependencies]
+rand = "0.8.5"
