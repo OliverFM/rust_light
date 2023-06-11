@@ -112,19 +112,6 @@ where
 
 impl<T> RawTensor<T>
 where
-    T: Numeric + Real,
-{
-    pub fn abs(&self) -> Self {
-        let mut result = RawTensor::new_empty(self.shape().clone());
-        for &elem in self.array.iter() {
-            result.array.push(elem.abs())
-        }
-        result
-    }
-}
-
-impl<T> RawTensor<T>
-where
     T: Numeric,
 {
     pub fn is_scalar(&self) -> bool {
