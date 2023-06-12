@@ -27,6 +27,6 @@ use crate::tensor::{Numeric, Scalar};
 //
 
 pub fn sgd_step<T: Numeric + Real>(layer: &mut Linear<T>, step_size: Scalar<T>) {
-    dbg!(&layer.weights);
+    // dbg!(&layer.weights.0.);
     layer.weights = layer.weights.clone() - &step_size * &layer.weights.grad();
 }

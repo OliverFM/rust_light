@@ -32,8 +32,10 @@ impl<T: Numeric> Derivative<T> {
         // grad = f'(g(hx)) g'(h(x)) h'(x)
         // f(g(h(x), z)) how do i set x.grad if we are now computing f'
         let self_grads = (self.jacobian_vector_product)(self.inputs.clone(), outer_grads);
+        //        dbg!(self_grads.len(), self.inputs.len(), &self.debug_info);
+        //        // dbg!(&self.inputs);
         for (grad, input) in self_grads.iter().zip(self.inputs.iter()) {
-            //            dbg!(&grad, &input, &self.debug_info);
+            //            //            dbg!(&grad, &input, &self.debug_info);
             debug_assert_eq!(
                 grad.count(),
                 input.count(),
@@ -44,6 +46,7 @@ impl<T: Numeric> Derivative<T> {
             if let Some(d) = input.grad_fn.as_ref() {
                 d.compute_jvp(vec![grad.clone()]);
             }
+            //            dbg!(&input);
         }
     }
 }
