@@ -12,4 +12,7 @@ pub trait Module<T: Numeric>: private::Private {
     fn forward(&self, inputs: Self::InputType) -> Self::OutputType;
 
     fn params(&self) -> TensorList<T>;
+
+    // TODO: convert to accept iterator
+    fn update_params(&mut self, new_params: TensorList<T>);
 }
