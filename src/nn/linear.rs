@@ -1,6 +1,7 @@
 use num::traits::real::Real;
 
-use crate::tensor::{Numeric, RcTensor, TensorLike};
+use crate::nn::Module;
+use crate::tensor::{Numeric, RcTensor, TensorLike, TensorList};
 
 pub struct Linear<T>
 where
@@ -15,19 +16,6 @@ impl<T> Linear<T>
 where
     T: Numeric + Real,
 {
-    pub fn forward(&self, batch_ref: RcTensor<T>) -> RcTensor<T> {
-        let batch = batch_ref.to_tensor();
-        // let y = self.weights.bmm(&batch);
-        let y = batch.bmm(&self.weights);
-
-        (self.activation)(&y + &self.bias)
-    }
-
-    pub fn update_params(&mut self, weights: RcTensor<T>, bias: RcTensor<T>) {
-        self.weights = weights;
-        self.bias = bias;
-    }
-
     pub fn params(&mut self) -> impl Iterator<Item = RcTensor<T>> {
         vec![self.weights.clone(), self.bias.clone()].into_iter()
     }
@@ -45,6 +33,29 @@ where
                 None => |t| t,
             },
         }
+    }
+}
+
+impl<T: Numeric> crate::nn::module::private::Private for Linear<T> {}
+
+impl<T: Numeric> Module<T> for Linear<T> {
+    type InputType = RcTensor<T>;
+    type OutputType = RcTensor<T>;
+
+    fn forward(&self, batch_ref: RcTensor<T>) -> RcTensor<T> {
+        let batch = batch_ref.to_tensor();
+        // let y = self.weights.bmm(&batch);
+        let y = batch.bmm(&self.weights);
+
+        (self.activation)(&y + &self.bias)
+    }
+
+    fn params(&self) -> TensorList<T> {
+        vec![self.weights.clone(), self.bias.clone()]
+    }
+    fn update_params(&mut self, mut new_params: TensorList<T>) {
+        self.bias = new_params.remove(1);
+        self.weights = new_params.remove(0);
     }
 }
 
