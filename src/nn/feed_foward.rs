@@ -1,5 +1,5 @@
 use crate::nn::{Linear, Module};
-#[allow(unused_imports)]
+#[allow(unused_imports)] // needed for .abs().sum()
 use crate::tensor::TensorLike;
 use crate::tensor::{Numeric, RcTensor, TensorList};
 
