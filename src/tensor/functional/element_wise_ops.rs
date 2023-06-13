@@ -95,9 +95,9 @@ where
 }
 pub(crate) fn jvp_from_diagonal_broadcast<T: Numeric>(
     diagonal: &RcTensor<T>,
-    jvp_shape: Option<&Vec<usize>>,
-    broadcast_shape: &Vec<usize>,
-    input_shape: &Vec<usize>,
+    jvp_shape: Option<&[usize]>,
+    broadcast_shape: &[usize],
+    input_shape: &[usize],
     grad: &RcTensor<T>,
 ) -> RcTensor<T> {
     debug_assert!(grad.shape().len() <= 2, "grad.shape()={:?}", grad.shape());
@@ -131,7 +131,7 @@ pub(crate) fn jvp_from_diagonal_broadcast<T: Numeric>(
         let jac_idx1 = global_index(&idx, diagonal.shape(), None).unwrap();
         for jac_idx0 in 0..dim_0 {
             // let input_idx = global_index(&idx, diagonal.shape(), None).unwrap();
-            let output_idx = global_index(&orig_idx, &input_shape, None).unwrap();
+            let output_idx = global_index(&orig_idx, input_shape, None).unwrap();
             //            // dbg!(vec![jac_idx0, input_idx], &jvp_shape);
             // let diag_jac_idx = global_index(&vec![jac_idx0, input_idx], &jvp_shape, None).unwrap();
             //            dbg!(&output_idx);
@@ -147,7 +147,7 @@ pub(crate) fn jvp_from_diagonal_broadcast<T: Numeric>(
         if !increment_index(&mut idx, &diagonal.shape()[..]) {
             break;
         }
-        assert!(increment_index(&mut orig_idx, &broadcast_shape[..]));
+        assert!(increment_index(&mut orig_idx, broadcast_shape));
     }
     let raw_left_grad = RawTensor::new(array, jvp_shape);
 

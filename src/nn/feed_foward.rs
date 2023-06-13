@@ -1,5 +1,7 @@
 use crate::nn::{Linear, Module};
-use crate::tensor::{Numeric, RcTensor, TensorLike, TensorList};
+#[allow(unused_imports)]
+use crate::tensor::TensorLike;
+use crate::tensor::{Numeric, RcTensor, TensorList};
 
 // struct FeedForward<T: Numeric> {
 //     layers: Vec<dyn Module<T>>,
@@ -33,12 +35,11 @@ impl<T: Numeric, const N: usize> Module<T> for Mlp<T, N> {
     fn params(&self) -> TensorList<T> {
         self.layers
             .iter()
-            .map(|layer| layer.params())
-            .flatten()
+            .flat_map(|layer| layer.params())
             .collect()
     }
 
-    fn update_params(&mut self, mut new_params: TensorList<T>) {
+    fn update_params(&mut self, new_params: TensorList<T>) {
         let mut param_iter = new_params.into_iter().rev();
         for i in (0..self.layers.len()).rev() {
             let bias = param_iter.next().unwrap();
