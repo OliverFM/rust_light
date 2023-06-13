@@ -15,16 +15,20 @@ use std::cmp::max;
 use itertools::EitherOrBoth::{Both, Left, Right};
 use itertools::Itertools;
 
-pub fn tanh<T, U, V>(tensor_like: U) -> RcTensor<T>
+// pub fn tanh<T, U, V>(tensor_like: U) -> RcTensor<T>
+// where
+//     T: Numeric + Real,
+//     U: Deref<Target = V> + std::fmt::Debug + Clone,
+//     V: TensorLike<Elem = T>,
+pub fn tanh<T>(tensor_ref: RcTensor<T>) -> RcTensor<T>
 where
     T: Numeric + Real,
-    U: Deref<Target = V> + std::fmt::Debug + Clone,
-    V: TensorLike<Elem = T>,
 {
-    let tensor = tensor_like.to_tensor();
+    let tensor = tensor_ref.to_tensor();
     let mut raw_tensor = generic_unary_op(&tensor, |t| t.tanh());
     raw_tensor.grad_fn = Some(Derivative::new(
         vec![tensor],
+        // generic_unary_jvp(tensor, )
         tanh_derivative_outer,
         format!("tanh, file: {}, line: {}", file!(), line!(),),
     ));
@@ -282,15 +286,13 @@ where
     result
 }
 
-pub(crate) fn abs<T, U, V>(tensor_like: U) -> RcTensor<T>
+pub(crate) fn abs<T>(tensor: RcTensor<T>) -> RcTensor<T>
 where
     T: Numeric + Real,
-    U: Deref<Target = V> + std::fmt::Debug + Clone,
-    V: TensorLike<Elem = T>,
 {
-    let mut raw_tensor = abs_raw(tensor_like.clone());
+    let mut raw_tensor = abs_raw(&tensor);
     raw_tensor.grad_fn = Some(Derivative::new(
-        vec![tensor_like.to_tensor()],
+        vec![tensor],
         abs_jvp,
         format!("abs, file: {}, line: {}", file!(), line!(),),
     ));
@@ -313,10 +315,9 @@ fn abs_jvp<T: Numeric + Sub<Output = T>>(
     })
 }
 
-pub(crate) fn abs_raw<T, U, V>(tensor_like: U) -> RawTensor<T>
+pub(crate) fn abs_raw<T, V>(tensor_like: &V) -> RawTensor<T>
 where
     T: Numeric + Real,
-    U: Deref<Target = V> + std::fmt::Debug + Clone,
     V: TensorLike<Elem = T>,
 {
     generic_unary_op(tensor_like, |t| t.abs())
@@ -445,40 +446,45 @@ fn test_sum_backward() {
 }
 
 #[test]
+fn test_add_to_zero() {
+    let res = &RcTensor::from([1, 2, 3]) - &RcTensor::from([1, 2, 3]);
+    assert_eq!(res, RcTensor::from([0, 0, 0]));
+    assert_eq!(res.sum().elem(), 0);
+}
+
+#[test]
 fn test_tanh_sets_grad() {
     let input = RcTensor::from([0.666]);
     let epsilon = 1e-12 as f64;
-    let output = tanh(&input).sum();
-    let output_perturbed = tanh(&(&input + &RcTensor::scalar(epsilon))).sum();
-    let numerical_derivative = &RcTensor::scalar(1.0 / epsilon) * &(&output_perturbed - &output);
-    output
-        .grad_fn
-        .clone()
-        .unwrap()
-        .compute_jvp(vec![RcTensor::scalar(1.0 as f64)]);
-    //    //    let input = dbg!(input);
+    let output = tanh(input.clone()).sum();
+    let output_perturbed = tanh((&input + &RcTensor::scalar(epsilon))).sum();
+    let numerical_derivative =
+        RcTensor::scalar(1.0 / epsilon) * (output_perturbed - output.clone());
+    output.backward();
     let grad = input.get_grad().take().unwrap();
-    //    //    dbg!("input.get_grad()={:?}", input.get_grad().clone());
     let abs_diff = (&numerical_derivative - &grad).abs();
-    assert!(abs_diff.sum().elem() <= 2e-4);
+    dbg!(&input, &abs_diff, &numerical_derivative, &grad);
+    assert!(abs_diff.sum().elem() <= 2e-4, "abs_diff={abs_diff:?}");
 }
 
 #[test]
 fn test_multi_dimensional_tanh() {
-    // TODO: get this to work with non-scalar inputs
     let input = RcTensor::from([[0.666, 12.0], [-3.2, -0.1]]);
-    let output = tanh(&tanh(&input)).sum();
+    let output = tanh(tanh(input.clone())).sum();
     let expected = RcTensor::from([[0.4792, 0.0000], [0.0028, 0.9803]]);
-    output
-        .grad_fn
-        .clone()
-        .unwrap()
-        .compute_jvp(vec![RcTensor::scalar(1.0 as f64)]);
-    // let grad = output.derivative.clone().unwrap().compute();
+    output.backward();
     let grad = input.get_grad().take().unwrap();
-    let abs_diff = (&expected - &grad).abs();
+    let sum = grad
+        .0
+        .array
+        .iter()
+        .zip(expected.0.array.iter())
+        .fold(0.0, |acc, (u, v)| acc + (u - v).abs());
 
-    assert!(abs_diff.sum().elem() <= 2e-4);
+    let abs_diff = (&expected - &grad).abs();
+    //
+    // let sum = abs_diff.sum().elem();
+    assert!(sum <= 2e-4, "sum={sum:?}, abs_diff={abs_diff:?}");
 }
 
 #[test]
@@ -487,8 +493,8 @@ fn test_tanh_twice_sets_grad() {
     let _input = RcTensor::from([[0.666, 12.0], [-3.2, -0.1]]);
     let input = RcTensor::from([0.666]);
     let epsilon = 1e-12 as f64;
-    let output = tanh(&tanh(&input)).sum();
-    let output_perturbed = tanh(&tanh(&(&input + &RcTensor::scalar(epsilon)))).sum();
+    let output = tanh(tanh(input.clone())).sum();
+    let output_perturbed = tanh(tanh((&input + &RcTensor::scalar(epsilon)))).sum();
     // println!(
     //     "output_perturbed=
     // {output_perturbed:?}"
@@ -531,8 +537,8 @@ fn test_tanh_derivative() {
         "perturbed_input.abs().sum()={:?}",
         perturbed_input.abs().sum()
     );
-    let output = tanh(&input);
-    let output_perturbed = tanh(&perturbed_input);
+    let output = tanh(input.clone());
+    let output_perturbed = tanh(perturbed_input);
     println!("output.abs().sum()={:?}", output.abs().sum());
     println!(
         "output_perturbed.abs().sum()={:?}",
@@ -581,6 +587,7 @@ fn test_abs() {
     let expected = RcTensor::from([[1.0, 2., 3.0], [1e-3, 7e2, 1.2]]);
     let expected_grad = RcTensor::from([[-1.0, -1.0, 1.0], [-1.0, -1.0, 1.0]]);
     let res = tensor.abs();
+    assert_eq!(res, expected);
     res.sum().backward();
     //    //    dbg!(&res, &expected);
     //    //    dbg!(&res.0.array, &expected.0.array);
@@ -590,4 +597,28 @@ fn test_abs() {
         assert!(v - ev < 1e-3 && ev - v < 1e-3, "v={v:?}, ev={ev:?}");
     }
     assert_eq!(tensor.grad(), expected_grad);
+}
+
+#[test]
+fn test_abs_sum() {
+    let tensor1 = RcTensor::from([[-1.0, -2., 3.0], [-1e-3, -7e2, 1.2]]);
+    let tensor2 = RcTensor::from([[12.0, 7.0, 1.23], [1e-3, 4.2, -10.0]]);
+    let expected = RcTensor::from([
+        [12. - 1.0, 7. - 2., 1.23 + 3.0],
+        [0., -4.2 + 7e2, 10. - 1.2],
+    ]);
+    let res = (tensor2 + tensor1).abs();
+    // assert_eq!(res, expected);
+    res.sum().backward();
+    //    //    dbg!(&res, &expected);
+    //    //    dbg!(&res.0.array, &expected.0.array);
+    // let diff = &res - &expected;
+    for (&v, &ev) in res.0.array.iter().zip(expected.0.array.iter()) {
+        assert!(v >= 0., "v={v:?}");
+        assert!(
+            v - ev < 1e-3 && ev - v < 1e-3,
+            "v={v:?}, ev={ev:?}, array={:?}",
+            res.0.array,
+        );
+    }
 }

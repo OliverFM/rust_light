@@ -1,7 +1,7 @@
 use num::traits::real::Real;
 
 use crate::nn::linear::Linear;
-use crate::tensor::{Numeric, Scalar};
+use crate::tensor::{Numeric, Scalar, TensorLike};
 
 // struct Sgd<T: Numeric + Real> {
 //     step_size: Scalar<T>,
@@ -29,4 +29,5 @@ use crate::tensor::{Numeric, Scalar};
 pub fn sgd_step<T: Numeric + Real>(layer: &mut Linear<T>, step_size: Scalar<T>) {
     // dbg!(&layer.weights.0.);
     layer.weights = layer.weights.clone() - &step_size * &layer.weights.grad();
+    layer.weights.zero_grad();
 }

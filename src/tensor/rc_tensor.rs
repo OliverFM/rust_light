@@ -38,7 +38,7 @@ where
     T: Numeric + Real,
 {
     pub fn abs(&self) -> Self {
-        functional::abs(self)
+        functional::abs(self.clone())
     }
 }
 impl<T: Numeric> RcTensor<T> {
@@ -296,7 +296,7 @@ where
 {
     type Output = RcTensor<T>;
     fn sub(self, right: U) -> Self::Output {
-        let neg_right: RcTensor<T> = right.deref().clone();
+        let neg_right: RcTensor<T> = right.deref().clone().neg();
         self.add(&neg_right)
     }
 }
