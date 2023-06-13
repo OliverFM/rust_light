@@ -1,5 +1,3 @@
-
-
 use num::traits::real::Real;
 
 use crate::tensor::{Numeric, RcTensor, TensorLike};
@@ -72,7 +70,11 @@ fn test_layer() {
         None,
     );
     let input = RcTensor::new(vec![1.0, 2.0], vec![1, 2]);
-    let res = layer.forward(input);
+    let res = layer.forward(input.clone());
+    res.sum().backward();
+    layer.weights.grad();
+    layer.bias.grad();
+    let res = layer.forward(input.clone());
     res.sum().backward();
     layer.weights.grad();
     layer.bias.grad();

@@ -213,17 +213,15 @@ pub(in crate::tensor) fn global_index(
         }
         if shaped_dim <= idx_dim {
             return Err(format!(
-                    "Trying to index too far into the view! -- &TensorView has dimension:
-                    {:?}
-                    Offest{:?}
-                    index is:
-                    {:?}
-                    the {}th position is out-of-bounds!
+                    "Trying to index too far into the view!
+                    TensorLike has shape: {:?}
+                    index is: {:?}
+                    Offest: {:?}
+                    the {i}-th position is out-of-bounds!
                     shaped_dim={shaped_dim}, shifted_idx={shifted_idx}, dim={dim}, idx_dim={idx_dim}",
                     shape,
-                    offset,
                     index,
-                    i,
+                    offset,
                 ));
         }
 

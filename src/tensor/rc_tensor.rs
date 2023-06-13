@@ -38,7 +38,7 @@ where
     T: Numeric + Real,
 {
     pub fn abs(&self) -> Self {
-        functional::abs(self)
+        functional::abs(self.clone())
     }
 }
 impl<T: Numeric> RcTensor<T> {
@@ -127,6 +127,12 @@ impl<T: Numeric> RcTensor<T> {
     }
 }
 
+impl<T: Numeric> std::fmt::Display for RcTensor<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self.0.array)
+    }
+}
+
 impl<T> TensorLikePrivate for RcTensor<T> where T: Numeric {}
 impl<T> TensorLike for RcTensor<T>
 where
@@ -140,10 +146,13 @@ where
     type GradType = RcTensor<T>;
 
     fn update_grad(&self, grad: Self::GradType) {
+        //        dbg!("updating grad:", &self, &grad);
         self.0.update_grad(grad);
+        //        dbg!("update complete", &self);
     }
 
     fn zero_grad(&self) {
+        //        dbg!("zeroing grad", &self);
         self.0.zero_grad();
     }
 
@@ -242,53 +251,81 @@ where
     }
 }
 
-impl<T, U, V> Add<U> for &RcTensor<T>
+impl<T, U> Add<U> for &RcTensor<T>
 where
     T: Numeric,
-    U: Deref<Target = V> + Clone + std::fmt::Debug,
-    V: TensorLike<Elem = T>,
+    U: Deref<Target = RcTensor<T>> + Clone + std::fmt::Debug,
 {
     type Output = RcTensor<T>;
     fn add(self, right: U) -> Self::Output {
-        functional::add(self, right)
+        let mut raw_tensor = functional::add_raw(self, right.deref().clone());
+        raw_tensor.grad_fn = Some(Derivative::new(
+            vec![self.clone(), right.deref().clone()],
+            functional::add_jvp,
+            format!("add, file: {}, line: {}", file!(), line!(),),
+        ));
+        RcTensor::from_raw(raw_tensor)
     }
 }
 
-impl<T, U, V> Add<U> for RcTensor<T>
+impl<T> Add<RcTensor<T>> for RcTensor<T>
 where
     T: Numeric,
-    U: Deref<Target = V> + Clone + std::fmt::Debug,
-    V: TensorLike<Elem = T>,
+    // U: Deref<Target = V> + Clone + std::fmt::Debug,
+    // V: TensorLike<Elem = T>,
 {
     type Output = RcTensor<T>;
-    fn add(self, right: U) -> Self::Output {
-        functional::add(self, right)
+    fn add(self, right: RcTensor<T>) -> Self::Output {
+        let mut raw_tensor = functional::add_raw(&self, &right);
+        raw_tensor.grad_fn = Some(Derivative::new(
+            vec![self, right],
+            functional::add_jvp,
+            format!("add, file: {}, line: {}", file!(), line!(),),
+        ));
+        RcTensor::from_raw(raw_tensor)
+        // let result = functional::add(self.clone(), right.clone());
+        //        // dbg!(self.clone(), right.clone(), result.clone());
+        // result
     }
 }
 
-impl<T, U, V> Sub<&U> for &RcTensor<T>
+impl<T, U> Sub<U> for &RcTensor<T>
 where
-    T: Numeric + Neg,
-    U: TensorLike<Elem = T>,
-    for<'a> &'a U: Neg<Output = V>,
-    V: TensorLike<Elem = T>,
-{
-    type Output = RcTensor<T>;
-    fn sub(self, right: &U) -> Self::Output {
-        RcTensor::from_raw(self.0.sub(right))
-    }
-}
-
-impl<T, U, V> Sub<U> for RcTensor<T>
-where
-    T: Numeric + Neg,
-    U: TensorLike<Elem = T>,
-    for<'a> &'a U: Neg<Output = V>,
-    V: TensorLike<Elem = T>,
+    T: Numeric + Neg<Output = T>,
+    U: Deref<Target = RcTensor<T>> + Clone + std::fmt::Debug,
 {
     type Output = RcTensor<T>;
     fn sub(self, right: U) -> Self::Output {
-        RcTensor::from_raw(self.0.sub(&right))
+        let neg_right: RcTensor<T> = right.deref().clone().neg();
+        self.add(&neg_right)
+    }
+}
+
+impl<T> Sub<RcTensor<T>> for RcTensor<T>
+where
+    T: Numeric + Neg<Output = T>,
+{
+    type Output = RcTensor<T>;
+    fn sub(self, right: RcTensor<T>) -> Self::Output {
+        self.add(right.neg())
+    }
+}
+
+impl<T> Neg for &RcTensor<T>
+where
+    T: Numeric + Neg<Output = T>,
+{
+    type Output = RcTensor<T>;
+    fn neg(self) -> Self::Output {
+        let mut raw_tensor = self.0.neg();
+        raw_tensor.grad_fn = Some(Derivative::new(
+            vec![self.clone()],
+            |tensors, grads| {
+                functional::generic_unary_jvp(&tensors[0], &grads[0], |_| T::one().neg())
+            },
+            format!("neg, file: {}, line: {}", file!(), line!(),),
+        ));
+        RcTensor::from_raw(raw_tensor)
     }
 }
 
@@ -321,10 +358,56 @@ where
 }
 
 #[test]
+fn test_update_grad() {
+    let tensor = RcTensor::from([1.0]);
+    let grad = RcTensor::from([7.0]);
+    tensor.clone().update_grad(grad.clone());
+    assert_eq!(tensor.grad(), grad);
+}
+
+#[test]
+fn test_neg() {
+    let tensor = RcTensor::from([1.0]);
+    tensor.neg().backward();
+    assert_eq!(tensor.grad(), RcTensor::from([-1.0]));
+}
+
+#[test]
+fn test_add_two_inputs() {
+    let tensor1 = RcTensor::from([111.0]);
+    let tensor2 = RcTensor::from([-12.0]);
+    (&tensor1 + &tensor2).backward();
+    //    dbg!(&tensor2);
+    assert_eq!(tensor1.grad(), RcTensor::from([1.0]));
+    assert_eq!(tensor2.grad(), RcTensor::from([1.0]));
+}
+
+#[test]
+fn test_add_two_inputs_cloned() {
+    let tensor1 = RcTensor::from([111.0]);
+    let tensor2 = RcTensor::from([-12.0]);
+    (tensor1.clone() + tensor2.clone()).backward();
+    //    dbg!(&tensor2);
+    assert_eq!(tensor1.grad(), RcTensor::from([1.0]));
+    assert_eq!(tensor2.grad(), RcTensor::from([1.0]));
+}
+
+#[test]
+fn test_add_3() {
+    let tensor1 = RcTensor::from([1.0]);
+    let tensor2 = RcTensor::from([1.0]);
+    let tensor3 = RcTensor::from([1.0]);
+    (&tensor1.clone().neg() + &(tensor2.clone() + tensor3.clone())).backward();
+    assert_eq!(tensor1.grad(), RcTensor::from([-1.0]));
+    assert_eq!(tensor2.grad(), RcTensor::from([1.0]));
+    assert_eq!(tensor3.grad(), RcTensor::from([1.0]));
+}
+
+#[test]
 fn test_element_wise_multiplication() {
     let left = RcTensor::from([1, 2, 3]);
     let right = RcTensor::from([7, 2, 8]);
-    dbg!("left={}, right={},", &left, &right);
+    //    //    dbg!("left={}, right={},", &left, &right);
     assert_eq!(&left * &right, RcTensor::from([7, 4, 24]));
 }
 
@@ -332,6 +415,6 @@ fn test_element_wise_multiplication() {
 fn test_element_wise_multiplication_on_rc_tensor_directly() {
     let left = RcTensor::from([1, 2, 3]);
     let right = RcTensor::from([7, 2, 8]);
-    dbg!("left={}, right={},", &left, &right);
+    //    //    dbg!("left={}, right={},", &left, &right);
     assert_eq!(left * right, RcTensor::from([7, 4, 24]));
 }

@@ -51,7 +51,7 @@ where
     V2: TensorLike<Elem = T>,
 {
     // assert!(2 <= self.shape().len() && self.shape().len() <= 3); // For now we can only do Batch matrix
-    dbg!(left.shape(), right.shape());
+    //    dbg!(left.shape(), right.shape());
     assert!(2 <= left.shape().len()); // For now we can only do Batch matrix
     assert!(right.shape().len() == 2); // rhs must be a matrix
                                        //
@@ -145,23 +145,23 @@ pub(crate) fn bmm_jvp<T: Numeric>(
         right_array.push(T::zero());
     }
 
-    println!(
-        "inputs[0].shape()={:?}, inputs[1].shape()={:?}, 
-        left_jacobian_shape={:?},
-        right_jacobian_shape={:?},
-        left_output_shape={:?}
-        right_output_shape={:?}
-        jacobians[0].shape()={:?}
-        bmm_output_shape={:?}",
-        inputs[0].shape(),
-        inputs[1].shape(),
-        &left_jacobian_shape,
-        &right_jacobian_shape,
-        &left_output_shape,
-        &right_output_shape,
-        jacobians[0].shape(),
-        &bmm_output_shape,
-    );
+    // println!(
+    //     "inputs[0].shape()={:?}, inputs[1].shape()={:?},
+    //     left_jacobian_shape={:?},
+    //     right_jacobian_shape={:?},
+    //     left_output_shape={:?}
+    //     right_output_shape={:?}
+    //     jacobians[0].shape()={:?}
+    //     bmm_output_shape={:?}",
+    //     inputs[0].shape(),
+    //     inputs[1].shape(),
+    //     &left_jacobian_shape,
+    //     &right_jacobian_shape,
+    //     &left_output_shape,
+    //     &right_output_shape,
+    //     jacobians[0].shape(),
+    //     &bmm_output_shape,
+    // );
 
     // currently: loop through all the non-zero values:
     // J_A[ø[i,j], ø[i,k]] = B[k,j]
@@ -172,10 +172,10 @@ pub(crate) fn bmm_jvp<T: Numeric>(
                 let self_jac_idx0 = global_index(&vec![i, j], &bmm_output_shape, None).unwrap();
                 let left_jac_idx1 = global_index(&vec![i, k], inputs[0].shape(), None).unwrap(); // for J_A
                 let right_jac_idx1 = global_index(&vec![k, j], inputs[1].shape(), None).unwrap(); // for J_A
-                println!(
-                    "i={i}, k={k}, j={j}, self_jac_idx0={:?}, self_jac_idx1={:?}",
-                    &self_jac_idx0, &left_jac_idx1,
-                );
+                                                                                                  // println!(
+                                                                                                  //     "i={i}, k={k}, j={j}, self_jac_idx0={:?}, self_jac_idx1={:?}",
+                                                                                                  //     &self_jac_idx0, &left_jac_idx1,
+                                                                                                  // );
                 assert!(self_jac_idx0 < left_jacobian_shape[0]);
                 assert!(self_jac_idx0 < jacobians[0].shape()[1]);
                 assert!(left_jac_idx1 < left_jacobian_shape[1]);
@@ -203,7 +203,7 @@ pub(crate) fn bmm_jvp<T: Numeric>(
                             panic!("{e}")
                         }
                     };
-                    println!("tmp_right={tmp_right:?}");
+                    // println!("tmp_right={tmp_right:?}");
                     right_array[tmp_right] +=
                         jacobians[0][&vec![input_jac_idx, self_jac_idx0]] * inputs[0][&vec![i, k]];
                 }
@@ -347,12 +347,12 @@ fn test_add_grad() {
 
         let computed_grad = left.get_grad().borrow().as_ref().unwrap().deref().clone();
         let diff = &computed_grad - &left_grad;
-        dbg!(&computed_grad, &left_grad, &diff);
+        //        dbg!(&computed_grad, &left_grad, &diff);
         assert!(diff.sum().elem() <= 1e-3);
 
         let computed_grad = right.get_grad().borrow().as_ref().unwrap().deref().clone();
         let diff = &computed_grad - &left_grad;
-        dbg!(&computed_grad, &right_grad, &diff);
+        //        dbg!(&computed_grad, &right_grad, &diff);
         assert!(diff.sum().elem() <= 1e-3);
     }
 }
@@ -397,7 +397,7 @@ fn test_bmm_runs() {
             left_array.push(random());
         }
         let left_array = left_array;
-        dbg!(&left_array, &left_shape, &length);
+        //        dbg!(&left_array, &left_shape, &length);
         let length = (right_shape.iter().product());
         let mut right_array: Vec<f32> = Vec::with_capacity(length);
         for _ in 0..length {
