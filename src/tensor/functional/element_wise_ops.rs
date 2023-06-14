@@ -35,6 +35,40 @@ where
     RcTensor::from_raw(raw_tensor)
 }
 
+pub fn relu<T>(tensor_ref: RcTensor<T>) -> RcTensor<T>
+where
+    T: Numeric + Real,
+{
+    let tensor = tensor_ref.to_tensor();
+    let mut raw_tensor = generic_unary_op(&tensor, |t| if t < T::zero() { T::zero() } else { t });
+    raw_tensor.grad_fn = Some(Derivative::new(
+        vec![tensor],
+        |tensors, grads| {
+            assert_eq!(
+                tensors.len(),
+                1,
+                "expected exactly one tensor but got: {}",
+                tensors.len()
+            );
+            assert_eq!(
+                grads.len(),
+                1,
+                "expected exactly one grad but got: {}",
+                grads.len()
+            );
+            generic_unary_jvp(&tensors[0], &grads[0], |t| {
+                if t < T::zero() {
+                    T::zero()
+                } else {
+                    T::one()
+                }
+            })
+        },
+        format!("relu, file: {}, line: {}", file!(), line!(),),
+    ));
+    RcTensor::from_raw(raw_tensor)
+}
+
 fn tanh_derivative_outer<T: Numeric + Real>(
     tensors: Vec<RcTensor<T>>,
     grads: Vec<RcTensor<T>>,

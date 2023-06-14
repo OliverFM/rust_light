@@ -3,6 +3,7 @@ use num::traits::real::Real;
 use crate::nn::Module;
 use crate::tensor::{Numeric, RcTensor, TensorLike, TensorList};
 
+#[derive(Debug)]
 pub struct Linear<T>
 where
     T: Numeric,
