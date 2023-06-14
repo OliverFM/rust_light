@@ -337,7 +337,7 @@ fn test_bmm_jvp_differing_shapes() {
 
 #[test]
 fn test_add_grad() {
-    for (left, right, left_grad, right_grad) in vec![(
+    for (left, right, left_grad, _right_grad) in vec![(
         RcTensor::from([1.0, 2.0, 3.0]),
         RcTensor::from([10.0, 42.0, -5.0]),
         RcTensor::from([1.0, 1.0, 1.0]),
@@ -383,7 +383,7 @@ fn test_bmm_2x2() {
 
 #[test]
 fn test_bmm_runs() {
-    use rand::{random, Rng};
+    use rand::{random};
     for (left_shape, right_shape) in vec![
         (vec![2, 2], vec![2, 2]),
         (vec![2, 2], vec![2, 1]),
@@ -391,14 +391,14 @@ fn test_bmm_runs() {
         // (vec![2, 8, 2], vec![2, 1]), // to get this to work we need to allow tensor
         // views/reshaping
     ] {
-        let length = (left_shape.iter().product());
+        let length = left_shape.iter().product();
         let mut left_array: Vec<f32> = Vec::with_capacity(length);
         for _ in 0..length {
             left_array.push(random());
         }
         let left_array = left_array;
         //        dbg!(&left_array, &left_shape, &length);
-        let length = (right_shape.iter().product());
+        let length = right_shape.iter().product();
         let mut right_array: Vec<f32> = Vec::with_capacity(length);
         for _ in 0..length {
             right_array.push(random());

@@ -491,7 +491,7 @@ fn test_tanh_sets_grad() {
     let input = RcTensor::from([0.666]);
     let epsilon = 1e-12 as f64;
     let output = tanh(input.clone()).sum();
-    let output_perturbed = tanh((&input + &RcTensor::scalar(epsilon))).sum();
+    let output_perturbed = tanh(&input + &RcTensor::scalar(epsilon)).sum();
     let numerical_derivative =
         RcTensor::scalar(1.0 / epsilon) * (output_perturbed - output.clone());
     output.backward();
@@ -528,7 +528,7 @@ fn test_tanh_twice_sets_grad() {
     let input = RcTensor::from([0.666]);
     let epsilon = 1e-12 as f64;
     let output = tanh(tanh(input.clone())).sum();
-    let output_perturbed = tanh(tanh((&input + &RcTensor::scalar(epsilon)))).sum();
+    let output_perturbed = tanh(tanh(&input + &RcTensor::scalar(epsilon))).sum();
     // println!(
     //     "output_perturbed=
     // {output_perturbed:?}"
