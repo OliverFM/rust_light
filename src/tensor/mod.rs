@@ -8,9 +8,9 @@ mod tensor_view;
 mod types;
 mod utils;
 
-pub use numeric::*;
-pub use raw_tensor::*;
-pub use rc_tensor::*;
-pub use tensor_like::*;
-pub use tensor_view::*;
+pub use numeric::Numeric;
+pub use raw_tensor::{RawTensor, SliceRange};
+pub use rc_tensor::RcTensor;
+pub use tensor_like::TensorLike;
+pub use tensor_view::TensorView;
 pub use types::*;

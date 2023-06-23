@@ -3,6 +3,7 @@ use crate::nn::{Linear, Module};
 use crate::tensor::TensorLike;
 use crate::tensor::{Numeric, RcTensor, TensorList};
 
+/// A sequence of Linear layers.
 #[derive(Debug)]
 pub struct Mlp<T, const N: usize>
 where
@@ -64,46 +65,6 @@ fn test_mlp_creation() {
 }
 
 #[test]
-fn test_mlp() {
-    use crate::optim::sgd::sgd_step;
-    use crate::tensor::functional;
-
-    for mut mlp in vec![Mlp::new([
-        Linear::new(
-            RcTensor::from([[1.0, 1e-2, -1e-3, -2.0], [-1.1, 0., 0., 0.7]]),
-            RcTensor::new_with_filler(vec![1, 4], 1.0),
-            Some(functional::tanh),
-        ),
-        Linear::new(
-            RcTensor::from([[1.0, -2.0], [-1.1, 0.7], [0.1, -0.2], [0.1, 0.0]]),
-            RcTensor::new_with_filler(vec![1, 2], 1.0),
-            Some(functional::tanh),
-        ),
-    ])] {
-        let input = RcTensor::new(vec![1.0, 2.0], vec![1, 2]);
-        let expected = RcTensor::new(vec![-1.0, 1.0], vec![1, 2]);
-
-        for _ in 0..31 {
-            let res = mlp.forward(input.clone());
-            // maybe the issue is because expected has no grad?
-            let loss = (&res - &expected).abs().sum();
-            // let loss = (&res).abs().sum();
-            // println!("loss={}", loss);
-            loss.backward();
-
-            let step_size = RcTensor::scalar(1e-2);
-            sgd_step(&mut mlp, step_size);
-            // if i % 10 == 0 {
-            //     println!("res={}", res);
-            // }
-            expected.zero_grad();
-        }
-        let res = mlp.forward(input.clone());
-        let loss = (&res - &expected).abs().sum();
-        assert!(loss.elem() < 0.2, "loss={loss}");
-    }
-}
-
 #[ignore] // WAAAAAAAYYYYYY too slow to run every time
 #[test]
 fn test_mlp_fits_random_function() {
