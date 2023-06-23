@@ -8,7 +8,7 @@ use crate::tensor::autograd::*;
 use crate::tensor::autograd::Derivative;
 use crate::tensor::utils::IndexIterator;
 use crate::tensor::utils::{global_index, increment_index, ElementIterator};
-use std::ops::Deref;
+use std::ops::{Deref, Sub};
 
 use std::cmp::max;
 

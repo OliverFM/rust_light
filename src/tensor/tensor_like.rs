@@ -8,7 +8,7 @@ pub trait TensorLikePublic: TensorLike {}
 pub(in crate::tensor) mod private {
     pub trait TensorLikePrivate {}
 }
-pub use crate::tensor::private::TensorLikePrivate;
+pub use private::TensorLikePrivate;
 
 pub trait TensorLike: TensorLikePrivate + std::fmt::Debug {
     type Elem: Numeric;

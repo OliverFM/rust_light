@@ -383,7 +383,7 @@ fn test_bmm_2x2() {
 
 #[test]
 fn test_bmm_runs() {
-    use rand::{random};
+    use rand::random;
     for (left_shape, right_shape) in vec![
         (vec![2, 2], vec![2, 2]),
         (vec![2, 2], vec![2, 1]),

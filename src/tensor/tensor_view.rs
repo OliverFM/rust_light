@@ -1,7 +1,7 @@
 use super::numeric::*;
 use crate::tensor::functional;
 use crate::tensor::utils::ElementIterator;
-use crate::tensor::{IndexType, RcTensor, Scalar, SliceRange, TensorLike, TensorLikePrivate};
+use crate::tensor::{IndexType, RcTensor, Scalar, SliceRange, TensorLike};
 
 use std::cmp::PartialEq;
 use std::ops::{Deref, Index};
@@ -77,7 +77,7 @@ where
     }
 }
 
-impl<T> TensorLikePrivate for TensorView<T> where T: Numeric {}
+impl<T> crate::tensor::tensor_like::TensorLikePrivate for TensorView<T> where T: Numeric {}
 
 impl<T> TensorLike for TensorView<T>
 where
