@@ -83,26 +83,26 @@ where
             left_index[left_index_len - 2] = i;
 
             rayon::scope(|s| {
-            for j in 0..new_shape[2] {
-            let slot;
-            (slot, slice) = slice.split_at_mut(1);
-            let mut right_index = right_index.clone();
-            let mut left_index= left_index.clone();
-            let left2 = left.clone();
-            let right2 = right.clone();
-            s.spawn(move |_| {
-                right_index[1] = j;
-                let mut val = T::zero();
-                for k in 0..right2.shape()[0] {
-                    left_index[left_index_len - 1] = k;
-                    right_index[0] = k;
-                    val += *left2.get(&left_index).unwrap().deref()
-                        * (*right2.get(&right_index).unwrap().deref());
-                }
+                for j in 0..new_shape[2] {
+                    let slot;
+                    (slot, slice) = slice.split_at_mut(1);
+                    let mut right_index = right_index.clone();
+                    let mut left_index = left_index.clone();
+                    let left2 = left.clone();
+                    let right2 = right.clone();
+                    s.spawn(move |_| {
+                        right_index[1] = j;
+                        let mut val = T::zero();
+                        for k in 0..right2.shape()[0] {
+                            left_index[left_index_len - 1] = k;
+                            right_index[0] = k;
+                            val += *left2.get(&left_index).unwrap().deref()
+                                * (*right2.get(&right_index).unwrap().deref());
+                        }
 
-                slot[0] = val;
-                });
-            }
+                        slot[0] = val;
+                    });
+                }
             });
             // dbg!(&remaining_slice);
         }
@@ -328,14 +328,8 @@ fn test_bmm_jvp() {
     let expected_jvp_a = RcTensor::from([[13.0, 42.0 + -7.0], [10.0 + 3.0, 42.0 + -7.0]]);
     let expected_jvp_b = RcTensor::from([[4., 4.], [6., 6.]]);
     matrix_a.bmm(&matrix_b).sum().backward();
-    assert_eq!(
-        matrix_a.get_grad().unwrap(),
-        expected_jvp_a
-    );
-    assert_eq!(
-        matrix_b.get_grad().unwrap(),
-        expected_jvp_b
-    );
+    assert_eq!(matrix_a.get_grad().unwrap(), expected_jvp_a);
+    assert_eq!(matrix_b.get_grad().unwrap(), expected_jvp_b);
 }
 
 #[test]

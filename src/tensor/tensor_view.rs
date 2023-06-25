@@ -4,16 +4,18 @@ use crate::tensor::utils::ElementIterator;
 use crate::tensor::{IndexType, RcTensor, Scalar, SliceRange, TensorLike};
 
 use std::cmp::PartialEq;
-use std::{sync::Arc,ops::{Deref, Index}};
+use std::{
+    ops::{Deref, Index},
+    sync::Arc,
+};
 
-
-#[derive(Clone,Debug, )]
+#[derive(Clone, Debug)]
 pub struct View {
     shape: Vec<usize>,
     offset: Vec<SliceRange>,
 }
 
-#[derive(Clone, Debug,  )]
+#[derive(Clone, Debug)]
 pub struct TensorView<T>
 where
     T: Numeric,

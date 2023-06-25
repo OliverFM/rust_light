@@ -1,9 +1,11 @@
 use num::traits::real::Real;
 
-
 use std::cmp::PartialEq;
 use std::convert::From;
-use std::{sync::Arc, ops::{Add, Deref, Mul, Sub}};
+use std::{
+    ops::{Add, Deref, Mul, Sub},
+    sync::Arc,
+};
 
 use super::autograd::{self, Derivative};
 use super::numeric::*;
@@ -22,7 +24,7 @@ use crate::tensor::{IndexType, Scalar};
 ///
 /// This lets you keep many pointers to the same data, which cna be very handy
 /// with using one tensor as an input to many functions.
-#[derive(Clone,Debug, PartialEq, )]
+#[derive(Clone, Debug, PartialEq)]
 pub struct RcTensor<T: Numeric>(pub(super) Arc<RawTensor<T>>);
 
 impl<T> Deref for RcTensor<T>

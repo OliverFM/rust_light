@@ -9,8 +9,5 @@ edition = "2021"
 num="0.4.0"
 itertools="0.10.5"
 rayon = "1.7.0"
-
-
-[dev-dependencies]
 rand = "0.8.5"
 rand_distr = "0.4.0"

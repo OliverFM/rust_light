@@ -1,7 +1,9 @@
 use std::cmp::PartialEq;
 use std::convert::From;
-use std::{sync::RwLock, ops::{Add, Deref, Index, Mul, Neg, Sub}};
-
+use std::{
+    ops::{Add, Deref, Index, Mul, Neg, Sub},
+    sync::RwLock,
+};
 
 use super::autograd::Derivative;
 use super::functional as F;
@@ -34,7 +36,7 @@ impl SliceRange {
 }
 
 /// The core `struct` in this library.
-#[derive(Debug, )]
+#[derive(Debug)]
 pub struct RawTensor<T>
 where
     T: Numeric,
@@ -46,15 +48,14 @@ where
     pub(in crate::tensor) grad_fn: Option<Derivative<T>>,
 }
 
-
 impl<T: Numeric> Clone for RawTensor<T> {
     fn clone(&self) -> Self {
-    RawTensor{
-        array: self.array.clone(),
-        shape: self.shape.clone(),
-        grad: self.grad.read().unwrap().clone().into(),
-        grad_fn: self.grad_fn.clone(),
-    }
+        RawTensor {
+            array: self.array.clone(),
+            shape: self.shape.clone(),
+            grad: self.grad.read().unwrap().clone().into(),
+            grad_fn: self.grad_fn.clone(),
+        }
     }
 }
 
@@ -294,7 +295,7 @@ where
     #[inline]
     fn bmm_rc<U>(&self, right: &U) -> RcTensor<Self::Elem>
     where
-        U: TensorLike<Elem = Self::Elem> ,
+        U: TensorLike<Elem = Self::Elem>,
     {
         RcTensor::from_raw(functional::bmm_raw(self, right))
     }
