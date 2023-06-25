@@ -1,6 +1,6 @@
 use num::traits::real::Real;
 
-use std::cell::RefCell;
+
 use std::cmp::PartialEq;
 use std::convert::From;
 use std::{sync::Arc, ops::{Add, Deref, Mul, Sub}};

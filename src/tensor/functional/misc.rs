@@ -84,7 +84,7 @@ where
 
             rayon::scope(|s| {
             for j in 0..new_shape[2] {
-            let mut slot;
+            let slot;
             (slot, slice) = slice.split_at_mut(1);
             let mut right_index = right_index.clone();
             let mut left_index= left_index.clone();
