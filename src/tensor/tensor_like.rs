@@ -10,7 +10,7 @@ pub(in crate::tensor) mod private {
 }
 pub use private::TensorLikePrivate;
 
-pub trait TensorLike: TensorLikePrivate + std::fmt::Debug {
+pub trait TensorLike: TensorLikePrivate + Sync + Send +  std::fmt::Debug {
     type Elem: Numeric;
     type ShapeReturn<'a>: Deref<Target = Vec<usize>> + std::fmt::Debug
     where

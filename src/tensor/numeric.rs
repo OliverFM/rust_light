@@ -11,14 +11,16 @@ pub trait Numeric:
     + AddAssign
     + Copy
     + Clone
-    + One
+    + std::fmt::Debug
     + Mul
-    + Sub
-    + SubAssign
+    + One
     + PartialEq
     + PartialOrd
+    + Send
+    + Sub
+    + SubAssign
+    + Sync
     + Zero
-    + std::fmt::Debug
 {
 }
 // https://stackoverflow.com/questions/42381185/specifying-generic-parameter-to-belong-to-a-small-set-of-types

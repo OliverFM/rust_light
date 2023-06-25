@@ -16,16 +16,6 @@ fn main() {
             RcTensor::new_with_filler(vec![1, 2], 1.0),
             Some(functional::tanh),
         ),
-        // Linear::new(
-        //     RcTensor::from([[1.0, -2.0], [-1.1, 0.7]]),
-        //     RcTensor::new_with_filler(vec![1, 2], 1.0),
-        //     Some(functional::tanh),
-        // ),
-        // Linear::new(
-        //     RcTensor::from([[1.0, -2.0], [-1.1, 0.7]]),
-        //     RcTensor::new_with_filler(vec![1, 2], 1.0),
-        //     Some(functional::tanh),
-        // ),
     ]);
     let input = RcTensor::new(vec![1.0, 2.0], vec![1, 2]);
     let expected = RcTensor::new(vec![-1.0, 1.0], vec![1, 2]);
