@@ -1,11 +1,11 @@
 use super::super::numeric::*;
 use crate::tensor::autograd::Derivative;
-
 use crate::tensor::utils::{global_index, ElementIterator};
-
 use crate::tensor::{autograd, RawTensor, RcTensor, TensorLike};
 
 use std::ops::Deref;
+
+use rayon;
 
 pub(crate) fn todo_backward<T: Numeric>(
     _inputs: Vec<RcTensor<T>>,
@@ -45,9 +45,11 @@ where
 pub(crate) fn bmm_raw<T, U1, U2, V1, V2>(left: U1, right: U2) -> RawTensor<T>
 where
     T: Numeric,
-    U1: Deref<Target = V1> + std::fmt::Debug + Clone,
+    // U1: Deref<Target = V1> + std::fmt::Debug + Clone  ,
+    U1: Deref<Target = V1> + std::fmt::Debug + Clone + Send + Sync,
     V1: TensorLike<Elem = T>,
-    U2: Deref<Target = V2> + Clone + std::fmt::Debug,
+    // U2: Deref<Target = V2> + std::fmt::Debug + Clone  ,
+    U2: Deref<Target = V2> + std::fmt::Debug + Clone + Send + Sync,
     V2: TensorLike<Elem = T>,
 {
     // assert!(2 <= self.shape().len() && self.shape().len() <= 3); // For now we can only do Batch matrix
@@ -56,44 +58,70 @@ where
     assert!(right.shape().len() == 2); // rhs must be a matrix
                                        //
     assert!(left.shape()[left.shape().len() - 1] == right.shape()[right.shape().len() - 2]);
-    let new_shape = if left.shape().len() == 2 {
+    let new_shape: Vec<usize> = if left.shape().len() == 2 {
         vec![1, left.shape()[0], right.shape()[1]]
     } else {
         vec![left.shape()[0], left.shape()[1], right.shape()[1]]
     };
 
-    let mut result = RawTensor::new_empty(new_shape);
+    // let mut result_array = Vec::with_capacity(new_shape.iter().product::<usize>());
+    let mut result_array = vec![T::zero(); new_shape.iter().product()];
 
     let mut left_index = left.shape().clone();
     let left_index_len = left_index.len();
-    let mut right_index = right.shape().clone();
-    for batch_idx in 0..result.shape[0] {
+    let right_index = right.shape().clone();
+    let mut remaining_slice = &mut result_array[..];
+    for batch_idx in 0..new_shape[0] {
         if left.shape().len() == 3 {
             left_index[0] = batch_idx;
         }
-        for i in 0..result.shape[1] {
+        for i in 0..new_shape[1] {
+            let mut slice;
+            (slice, remaining_slice) = remaining_slice.split_at_mut(new_shape[2]);
+            // dbg!(&remaining_slice.len());
+            assert_eq!(slice.len(), new_shape[2]);
             left_index[left_index_len - 2] = i;
-            for j in 0..result.shape[2] {
-                right_index[1] = j;
-                let mut val = T::zero();
-                for k in 0..right.shape()[0] {
-                    left_index[left_index_len - 1] = k;
-                    right_index[0] = k;
-                    val += *left.get(&left_index).unwrap().deref()
-                        * (*right.get(&right_index).unwrap().deref());
+
+            rayon::scope(|s| {
+                for j in 0..new_shape[2] {
+                    let slot;
+                    (slot, slice) = slice.split_at_mut(1);
+                    let mut right_index = right_index.clone();
+                    let mut left_index = left_index.clone();
+                    let left2 = left.clone();
+                    let right2 = right.clone();
+                    s.spawn(move |_| {
+                        right_index[1] = j;
+                        let mut val = T::zero();
+                        for k in 0..right2.shape()[0] {
+                            left_index[left_index_len - 1] = k;
+                            right_index[0] = k;
+                            val += *left2.get(&left_index).unwrap().deref()
+                                * (*right2.get(&right_index).unwrap().deref());
+                        }
+
+                        slot[0] = val;
+                    });
                 }
-                result.array.push(val);
-            }
+            });
+            // dbg!(&remaining_slice);
         }
     }
+    // dbg!(&result_array);
     if left.shape().len() == 2 {
-        return RawTensor {
-            array: result.array,
-            shape: result.shape[1..].to_vec(),
+        RawTensor {
+            array: result_array,
+            shape: new_shape[1..].to_vec(),
             ..Default::default()
-        };
+        }
+    } else {
+        RawTensor {
+            array: result_array,
+            shape: new_shape,
+
+            ..Default::default()
+        }
     }
-    result
 }
 
 /// c[i,j] = dot(A[i, ..], B[..,j])
@@ -264,8 +292,8 @@ fn test_dot_autograd() {
     let left = RcTensor::from([1.0, 2.0, 3.0]);
     let right = RcTensor::from([4.0, 5.0, 6.0]);
     dot(&left, &right).backward();
-    assert_eq!(&right, left.get_grad().borrow().as_ref().unwrap());
-    assert_eq!(&left, right.get_grad().borrow().as_ref().unwrap());
+    assert_eq!(right, left.get_grad().unwrap());
+    assert_eq!(left, right.get_grad().unwrap());
 }
 
 // TODO: generalise this to views
@@ -300,14 +328,8 @@ fn test_bmm_jvp() {
     let expected_jvp_a = RcTensor::from([[13.0, 42.0 + -7.0], [10.0 + 3.0, 42.0 + -7.0]]);
     let expected_jvp_b = RcTensor::from([[4., 4.], [6., 6.]]);
     matrix_a.bmm(&matrix_b).sum().backward();
-    assert_eq!(
-        *matrix_a.get_grad().borrow().as_ref().unwrap(),
-        expected_jvp_a
-    );
-    assert_eq!(
-        *matrix_b.get_grad().borrow().as_ref().unwrap(),
-        expected_jvp_b
-    );
+    assert_eq!(matrix_a.get_grad().unwrap(), expected_jvp_a);
+    assert_eq!(matrix_b.get_grad().unwrap(), expected_jvp_b);
 }
 
 #[test]
@@ -321,14 +343,14 @@ fn test_bmm_jvp_differing_shapes() {
     let expected_jvp_b = RcTensor::from([[127.4500, 127.4500, 127.4500], [6.0010, 6.0010, 6.0010]]);
     matrix_a.bmm(&matrix_b).sum().backward();
     assert!(
-        (matrix_a.get_grad().borrow().as_ref().unwrap() - &expected_jvp_a)
+        (matrix_a.get_grad().unwrap() - &expected_jvp_a)
             .sum()
             .elem()
             <= 1e-3
     );
 
     assert!(
-        (matrix_b.get_grad().borrow().as_ref().unwrap() - &expected_jvp_b)
+        (matrix_b.get_grad().unwrap() - &expected_jvp_b)
             .sum()
             .elem()
             <= 1e-3
@@ -345,12 +367,12 @@ fn test_add_grad() {
     )] {
         (&left + &right).sum().backward();
 
-        let computed_grad = left.get_grad().borrow().as_ref().unwrap().deref().clone();
+        let computed_grad = left.get_grad().unwrap().deref().clone();
         let diff = &computed_grad - &left_grad;
         //        dbg!(&computed_grad, &left_grad, &diff);
         assert!(diff.sum().elem() <= 1e-3);
 
-        let computed_grad = right.get_grad().borrow().as_ref().unwrap().deref().clone();
+        let computed_grad = right.get_grad().unwrap().deref().clone();
         let diff = &computed_grad - &left_grad;
         //        dbg!(&computed_grad, &right_grad, &diff);
         assert!(diff.sum().elem() <= 1e-3);

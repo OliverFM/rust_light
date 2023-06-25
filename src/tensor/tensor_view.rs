@@ -4,16 +4,18 @@ use crate::tensor::utils::ElementIterator;
 use crate::tensor::{IndexType, RcTensor, Scalar, SliceRange, TensorLike};
 
 use std::cmp::PartialEq;
-use std::ops::{Deref, Index};
-use std::rc::Rc;
+use std::{
+    ops::{Deref, Index},
+    sync::Arc,
+};
 
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 pub struct View {
     shape: Vec<usize>,
     offset: Vec<SliceRange>,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone, Debug)]
 pub struct TensorView<T>
 where
     T: Numeric,
@@ -21,7 +23,7 @@ where
     // TODO: convert this to look at slices of tensors. e.g. tensor[..1]
     // tensor: &'a Tensor<T>,
     tensor: RcTensor<T>,
-    view: Rc<View>,
+    view: Arc<View>,
 }
 
 impl<T> Index<&Vec<usize>> for TensorView<T>

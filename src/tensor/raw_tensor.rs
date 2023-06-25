@@ -1,7 +1,9 @@
-use std::cell::RefCell;
 use std::cmp::PartialEq;
 use std::convert::From;
-use std::ops::{Add, Deref, Index, Mul, Neg, Sub};
+use std::{
+    ops::{Add, Deref, Index, Mul, Neg, Sub},
+    sync::RwLock,
+};
 
 use super::autograd::Derivative;
 use super::functional as F;
@@ -34,7 +36,7 @@ impl SliceRange {
 }
 
 /// The core `struct` in this library.
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct RawTensor<T>
 where
     T: Numeric,
@@ -42,8 +44,19 @@ where
     // TODO: consider using const generics to switch to type: Box<[T; N]>
     pub(in crate::tensor) array: Vec<T>, // later on, I will need unsafe code to replace this with a statically sized type
     pub(in crate::tensor) shape: Vec<usize>, // TODO: convert to let this be a slice
-    pub(in crate::tensor) grad: RefCell<Option<RcTensor<T>>>, // TODO: think about the best representation here
+    pub(in crate::tensor) grad: RwLock<Option<RcTensor<T>>>, // TODO: think about the best representation here
     pub(in crate::tensor) grad_fn: Option<Derivative<T>>,
+}
+
+impl<T: Numeric> Clone for RawTensor<T> {
+    fn clone(&self) -> Self {
+        RawTensor {
+            array: self.array.clone(),
+            shape: self.shape.clone(),
+            grad: self.grad.read().unwrap().clone().into(),
+            grad_fn: self.grad_fn.clone(),
+        }
+    }
 }
 
 impl<T: Numeric> PartialEq for RawTensor<T> {
@@ -66,7 +79,7 @@ where
     fn default() -> Self {
         RawTensor {
             shape: vec![],
-            grad: RefCell::new(None),
+            grad: RwLock::new(None),
             array: vec![],
             grad_fn: None,
         }
@@ -288,15 +301,15 @@ where
     }
 
     fn zero_grad(&self) {
-        *self.grad.borrow_mut() = None;
+        *self.grad.write().unwrap() = None;
     }
 
     fn update_grad(&self, grad: Self::GradType) {
-        let new_grad = match self.grad.borrow().as_ref() {
+        let new_grad = match self.grad.read().unwrap().as_ref() {
             None => Some(grad),
             Some(other_grad) => Some(other_grad + &grad),
         };
-        *self.grad.borrow_mut() = new_grad;
+        *self.grad.write().unwrap() = new_grad;
     }
     fn shape(&self) -> Self::ShapeReturn<'_> {
         &self.shape

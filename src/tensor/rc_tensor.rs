@@ -1,10 +1,11 @@
 use num::traits::real::Real;
 
-use std::cell::RefCell;
 use std::cmp::PartialEq;
 use std::convert::From;
-use std::ops::{Add, Deref, Mul, Sub};
-use std::rc::Rc;
+use std::{
+    ops::{Add, Deref, Mul, Sub},
+    sync::Arc,
+};
 
 use super::autograd::{self, Derivative};
 use super::numeric::*;
@@ -19,8 +20,12 @@ use crate::tensor::{IndexType, Scalar};
 //     RcTensor::new_with_filler(tensors[0].shape().to_vec(), T::one())
 // }
 
-#[derive(Debug, PartialEq, Clone)]
-pub struct RcTensor<T: Numeric>(pub(super) Rc<RawTensor<T>>);
+/// Core struct: a reference counted Tensor
+///
+/// This lets you keep many pointers to the same data, which cna be very handy
+/// with using one tensor as an input to many functions.
+#[derive(Clone, Debug, PartialEq)]
+pub struct RcTensor<T: Numeric>(pub(super) Arc<RawTensor<T>>);
 
 impl<T> Deref for RcTensor<T>
 where
@@ -58,7 +63,7 @@ impl<T: Numeric> RcTensor<T> {
     }
 
     pub(in crate::tensor) fn from_raw(raw_tensor: RawTensor<T>) -> RcTensor<T> {
-        RcTensor(Rc::new(raw_tensor))
+        RcTensor(Arc::new(raw_tensor))
     }
 
     // pub(super) fn compute_grad(&self) -> Option<Self> {
@@ -71,20 +76,20 @@ impl<T: Numeric> RcTensor<T> {
 
     pub(in crate::tensor) fn new_empty(shape: Vec<usize>) -> RcTensor<T> {
         let raw_tensor = RawTensor::new_empty(shape);
-        RcTensor(Rc::new(raw_tensor))
+        RcTensor(Arc::new(raw_tensor))
     }
     pub fn new_with_filler(shape: Vec<usize>, filler: T) -> RcTensor<T> {
         let raw_tensor = RawTensor::new_with_filler(shape, filler);
-        RcTensor(Rc::new(raw_tensor))
+        RcTensor(Arc::new(raw_tensor))
     }
 
     pub fn scalar(scalar: T) -> RcTensor<T> {
         let raw_tensor = RawTensor::scalar(scalar);
-        RcTensor(Rc::new(raw_tensor))
+        RcTensor(Arc::new(raw_tensor))
     }
     pub fn new(array: Vec<T>, shape: Vec<usize>) -> RcTensor<T> {
         let raw_tensor = RawTensor::new(array, shape);
-        RcTensor(Rc::new(raw_tensor))
+        RcTensor(Arc::new(raw_tensor))
     }
 
     pub fn view(&self, shape: Vec<SliceRange>) -> TensorView<T> {
@@ -115,15 +120,16 @@ impl<T: Numeric> RcTensor<T> {
         self.deref().get_with_offset(index, offset)
     }
 
-    pub(in crate::tensor) fn get_grad<'a>(&self) -> RefCell<Option<RcTensor<T>>>
+    pub(in crate::tensor) fn get_grad<'a>(&self) -> Option<RcTensor<T>>
     where
         Self: 'a,
     {
-        self.0.grad.clone()
+        self.0.grad.read().unwrap().clone()
     }
 
+    //TODO: deprecate
     pub fn grad(&self) -> RcTensor<T> {
-        self.get_grad().borrow().as_ref().unwrap().clone()
+        self.get_grad().unwrap()
     }
 }
 
@@ -307,6 +313,15 @@ where
 {
     type Output = RcTensor<T>;
     fn sub(self, right: RcTensor<T>) -> Self::Output {
+        self.add(right.neg())
+    }
+}
+impl<T> Sub<&RcTensor<T>> for RcTensor<T>
+where
+    T: Numeric + Neg<Output = T>,
+{
+    type Output = RcTensor<T>;
+    fn sub(self, right: &RcTensor<T>) -> Self::Output {
         self.add(right.neg())
     }
 }
