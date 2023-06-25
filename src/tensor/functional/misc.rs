@@ -91,6 +91,7 @@ where
                     let left2 = left.clone();
                     let right2 = right.clone();
                     s.spawn(move |_| {
+                        // dbg!(rayon::current_num_threads());
                         right_index[1] = j;
                         let mut val = T::zero();
                         for k in 0..right2.shape()[0] {

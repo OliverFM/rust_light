@@ -21,20 +21,20 @@ fn main() {
     };
     let mut mlp = Mlp::new([
         Linear::new(
-            sample_vector(&vec![2, 128]),
-            sample_vector(&vec![1, 128]),
+            sample_vector(&vec![16, 512]),
+            sample_vector(&vec![1, 512]),
             Some(functional::relu),
         ),
         Linear::new(
-            sample_vector(&vec![128, 2]),
-            sample_vector(&vec![1, 2]),
+            sample_vector(&vec![512, 16]),
+            sample_vector(&vec![1, 16]),
             Some(functional::tanh),
         ),
     ]);
-    let input = RcTensor::new(vec![1.0, 2.0], vec![1, 2]);
-    let expected = RcTensor::new(vec![-1.0, 1.0], vec![1, 2]);
+    let input = sample_vector(&vec![1, 16]);
+    let expected = sample_vector(&vec![1, 16]);
 
-    for i in 0..301 {
+    for i in 0..101 {
         let res = mlp.forward(input.clone());
         // maybe the issue is because expected has no grad?
         let loss = (&res - &expected).abs().sum();
