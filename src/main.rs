@@ -28,18 +28,18 @@ fn main() {
 
     let mut mlp = Mlp::new([
         Linear::new(
-            sample_vector(&vec![8, 8192]),
-            sample_vector(&vec![1, 8192]),
+            sample_vector(&[8, 8192]),
+            sample_vector(&[1, 8192]),
             Some(functional::relu),
         ),
         Linear::new(
-            sample_vector(&vec![8192, 8192]),
-            sample_vector(&vec![1, 8192]),
+            sample_vector(&[8192, 8192]),
+            sample_vector(&[1, 8192]),
             Some(functional::tanh),
         ),
         Linear::new(
-            sample_vector(&vec![8192, 8]),
-            sample_vector(&vec![1, 8]),
+            sample_vector(&[8192, 8]),
+            sample_vector(&[1, 8]),
             Some(functional::tanh),
         ),
     ]);
@@ -72,10 +72,10 @@ fn main() {
     //         Some(functional::tanh),
     //     ),
     // ]);
-    let input = sample_vector(&vec![1, 8]);
+    let input = sample_vector(&[1, 8]);
     let expected = RcTensor::new_with_filler(vec![1, 8], 1.0);
 
-    for i in 0..2 {
+    for _i in 0..2 {
         let res = mlp.forward(input.clone());
         // maybe the issue is because expected has no grad?
         let loss = (&res - &expected).abs().sum();
