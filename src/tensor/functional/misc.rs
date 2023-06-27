@@ -70,6 +70,7 @@ where
     let mut left_index = left.shape().clone();
     let left_index_len = left_index.len();
     let right_index = right.shape().clone();
+    let right_shape = &right.shape().clone();
     let mut remaining_slice = &mut result_array[..];
     for batch_idx in 0..new_shape[0] {
         if left.shape().len() == 3 {
@@ -82,26 +83,38 @@ where
             assert_eq!(slice.len(), new_shape[2]);
             left_index[left_index_len - 2] = i;
 
-            rayon::scope(|s| {
+            rayon::in_place_scope(|s| {
+                // std::thread::scope(|s| {
+                // dbg!(&new_shape[]);
                 for j in 0..new_shape[2] {
                     let slot;
                     (slot, slice) = slice.split_at_mut(1);
-                    let mut right_index = right_index.clone();
-                    let mut left_index = left_index.clone();
-                    let left2 = left.clone();
-                    let right2 = right.clone();
-                    s.spawn(move |_| {
-                        right_index[1] = j;
+                    let mut right_index2 = right_index.clone();
+                    let mut left_index2 = left_index.clone();
+                    let left2 = &left;
+                    let right2 = &right;
+                    let mut closure = move || {
+                        // dbg!(rayon::current_thread_index());
+                        // dbg!(std::thread::current().id(), std::thread::current().name(),);
+                        right_index2[1] = j;
                         let mut val = T::zero();
-                        for k in 0..right2.shape()[0] {
-                            left_index[left_index_len - 1] = k;
-                            right_index[0] = k;
-                            val += *left2.get(&left_index).unwrap().deref()
-                                * (*right2.get(&right_index).unwrap().deref());
+                        for k in 0..right_shape[0] {
+                            // dbg!(&k, rayon::current_thread_index().unwrap());
+                            left_index2[left_index_len - 1] = k;
+                            right_index2[0] = k;
+                            val += *left2.get(&left_index2).unwrap()
+                                * (*right2.get(&right_index2).unwrap());
                         }
 
                         slot[0] = val;
-                    });
+                    };
+                    if right.shape()[0] > 0 {
+                        s.spawn(move |_| closure()); // Rayon version
+
+                    // s.spawn(move || closure());
+                    } else {
+                        closure();
+                    }
                 }
             });
             // dbg!(&remaining_slice);
