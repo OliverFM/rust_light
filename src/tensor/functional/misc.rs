@@ -3,7 +3,8 @@ use crate::tensor::autograd::Derivative;
 use crate::tensor::utils::{global_index, ElementIterator};
 use crate::tensor::{autograd, RawTensor, RcTensor, TensorLike};
 
-use std::ops::Deref;
+use crossbeam::channel::{unbounded, Receiver, Sender};
+use std::{iter, ops::Deref};
 
 use rayon;
 
@@ -137,6 +138,51 @@ where
     }
 }
 
+struct SplitArrayWriter<'a, T: Numeric> {
+    segments: Vec<&'a mut [T]>,
+    width: usize,
+    splits: usize,
+    senders: Option<Vec<Sender<(usize, T)>>>,
+    receivers: Vec<Receiver<(usize, T)>>,
+}
+
+impl<'a, T: Numeric> SplitArrayWriter<'a, T> {
+    fn new(mut slice: &'a mut [T]) -> Self {
+        let width = 32;
+        let splits = slice.len() / 32;
+        let segments: Vec<_> = slice.rchunks_mut(width).collect();
+        let (senders, receivers) = iter::repeat_with(unbounded).take(segments.len()).unzip();
+        SplitArrayWriter {
+            segments,
+            width,
+            splits,
+            senders: Some(senders),
+            receivers,
+        }
+    }
+
+    fn write_and_join<'b>(mut self, scope: rayon::Scope<'b>)
+    where
+        Self: 'b,
+    {
+        self.senders = None;
+        scope.spawn(move |inner_scope| {
+            self.segments
+                .into_iter()
+                .zip(self.receivers.into_iter())
+                .enumerate()
+                .for_each(move |(slice_idx, (slice, rx))| {
+                    inner_scope.spawn(move |_| {
+                        rx.iter().for_each(|(global_idx, value)| {
+                            let local_idx = global_idx - slice_idx * self.width;
+                            slice[local_idx] += value;
+                        })
+                    })
+                })
+        })
+    }
+}
+
 /// c[i,j] = dot(A[i, ..], B[..,j])
 /// so A[i,k] * B[k,j] appears for all j -> so J_A[ø[i,j], ø[i,k], ] = B[k,j]
 /// so A[i,k] * B[k,j] appears for all j -> so J_A[ø_J[i,j], ø_B[k,j], ] = A[i,k]
@@ -185,24 +231,6 @@ pub(crate) fn bmm_jvp<T: Numeric>(
     for _ in 0..right_length {
         right_array.push(T::zero());
     }
-
-    // println!(
-    //     "inputs[0].shape()={:?}, inputs[1].shape()={:?},
-    //     left_jacobian_shape={:?},
-    //     right_jacobian_shape={:?},
-    //     left_output_shape={:?}
-    //     right_output_shape={:?}
-    //     jacobians[0].shape()={:?}
-    //     bmm_output_shape={:?}",
-    //     inputs[0].shape(),
-    //     inputs[1].shape(),
-    //     &left_jacobian_shape,
-    //     &right_jacobian_shape,
-    //     &left_output_shape,
-    //     &right_output_shape,
-    //     jacobians[0].shape(),
-    //     &bmm_output_shape,
-    // );
 
     // currently: loop through all the non-zero values:
     // J_A[ø[i,j], ø[i,k]] = B[k,j]
