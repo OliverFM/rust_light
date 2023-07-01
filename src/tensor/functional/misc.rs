@@ -148,7 +148,7 @@ struct SplitArrayWriter<'a, T: Numeric> {
 }
 
 impl<'a, T: Numeric> SplitArrayWriter<'a, T> {
-    fn new(mut slice: &'a mut [T]) -> Self {
+    fn new(slice: &'a mut [T]) -> Self {
         let bit_width = 5;
         let width = 1 << bit_width;
         let splits = slice.len() / width;
@@ -212,6 +212,13 @@ pub(crate) fn bmm_jvp<T: Numeric>(
     inputs: Vec<RcTensor<T>>,
     jacobians: Vec<RcTensor<T>>,
 ) -> Vec<RcTensor<T>> {
+    // assert!(match std::env::var("RAYON_NUM_THREADS") {
+    //     Ok(s) => match s.parse::<usize>() {
+    //         Ok(n) => n >= 2,
+    //         _ => false,
+    //     },
+    //     _ => true,
+    // });
     assert!(
         inputs.len() == 2 && jacobians.len() == 1,
         "inputs.len()={}, jacobians.len()={}",
@@ -232,7 +239,8 @@ pub(crate) fn bmm_jvp<T: Numeric>(
         inputs[0].shape()[0] * inputs[0].shape()[1], // we are only doing this for the left input
     ];
     let left_output_shape = vec![jacobians[0].shape()[0], left_jacobian_shape[1]];
-    let left_length = left_output_shape[0] * left_output_shape[1]; // jacobians[0].shape()[0] * inputs[1].shape()[1];
+    let left_output_shape_ref = &left_output_shape;
+    let left_length = left_output_shape_ref[0] * left_output_shape_ref[1]; // jacobians[0].shape()[0] * inputs[1].shape()[1];
     let mut left_array = vec![T::zero(); left_length];
 
     let right_jacobian_shape = vec![
@@ -240,39 +248,46 @@ pub(crate) fn bmm_jvp<T: Numeric>(
         inputs[1].shape()[0] * inputs[1].shape()[1], // we are only doing this for the left input
     ];
     let right_output_shape = vec![jacobians[0].shape()[0], right_jacobian_shape[1]];
-    let right_length = right_output_shape[0] * right_output_shape[1]; // jacobians[0].shape()[0] * inputs[1].shape()[1];
+    let right_output_shape_ref = &right_output_shape;
+    let right_length = right_output_shape_ref[0] * right_output_shape_ref[1]; // jacobians[0].shape()[0] * inputs[1].shape()[1];
     let mut right_array = vec![T::zero(); right_length];
 
-    let mut left_split_writer = SplitArrayWriter::new(&mut left_array[..]);
-    let mut right_split_writer = SplitArrayWriter::new(&mut right_array[..]);
     // currently: loop through all the non-zero values:
     // J_A[ø[i,j], ø[i,k]] = B[k,j]
     // Consider seeing if there is a way to get this to work such that we also build the array as
-    rayon::scope(|s| {
+    rayon::in_place_scope(|s| {
+        let mut left_split_writer = SplitArrayWriter::new(&mut left_array[..]);
+        let mut right_split_writer = SplitArrayWriter::new(&mut right_array[..]);
+        let left_split_writer_ref = &mut left_split_writer;
+        let right_split_writer_ref = &mut right_split_writer;
         for i in 0..inputs[0].shape()[0] {
             for k in 0..inputs[0].shape()[1] {
                 for j in 0..inputs[1].shape()[1] {
-                    let mut closure = |_| {
+                    let left_writer = left_split_writer_ref.get_writer();
+                    let right_writer = right_split_writer_ref.get_writer();
+                    let inputs_ref = &inputs;
+                    let jacobians_ref = &jacobians;
+                    let bmm_output_shape_ref = &bmm_output_shape;
+                    let left_jacobian_shape_ref = &left_jacobian_shape;
+                    s.spawn(move |_| {
                         let self_jac_idx0 =
-                            global_index(&vec![i, j], &bmm_output_shape, None).unwrap();
+                            global_index(&vec![i, j], bmm_output_shape_ref, None).unwrap();
                         let left_jac_idx1 =
-                            global_index(&vec![i, k], inputs[0].shape(), None).unwrap(); // for J_A
+                            global_index(&vec![i, k], inputs_ref[0].shape(), None).unwrap(); // for J_A
                         let right_jac_idx1 =
-                            global_index(&vec![k, j], inputs[1].shape(), None).unwrap(); // for J_A
-                                                                                         // println!(
-                                                                                         //     "i={i}, k={k}, j={j}, self_jac_idx0={:?}, self_jac_idx1={:?}",
-                                                                                         //     &self_jac_idx0, &left_jac_idx1,
-                                                                                         // );
-                        assert!(self_jac_idx0 < left_jacobian_shape[0]);
-                        assert!(self_jac_idx0 < jacobians[0].shape()[1]);
-                        assert!(left_jac_idx1 < left_jacobian_shape[1]);
+                            global_index(&vec![k, j], inputs_ref[1].shape(), None).unwrap(); // for J_A
+                                                                                             // println!(
+                                                                                             //     "i={i}, k={k}, j={j}, self_jac_idx0={:?}, self_jac_idx1={:?}",
+                                                                                             //     &self_jac_idx0, &left_jac_idx1,
+                                                                                             // );
+                        assert!(self_jac_idx0 < left_jacobian_shape_ref[0]);
+                        assert!(self_jac_idx0 < jacobians_ref[0].shape()[1]);
+                        assert!(left_jac_idx1 < left_jacobian_shape_ref[1]);
 
-                        let left_writer = left_split_writer.get_writer();
-                        let right_writer = right_split_writer.get_writer();
-                        for input_jac_idx in 0..jacobians[0].shape()[0] {
+                        for input_jac_idx in 0..jacobians_ref[0].shape()[0] {
                             let tmp_left = match global_index(
                                 &vec![input_jac_idx, left_jac_idx1],
-                                &left_output_shape,
+                                left_output_shape_ref,
                                 None,
                             ) {
                                 Ok(t) => t,
@@ -281,13 +296,13 @@ pub(crate) fn bmm_jvp<T: Numeric>(
                                 }
                             };
 
-                            let left_val = jacobians[0][&vec![input_jac_idx, self_jac_idx0]]
-                                * inputs[1][&vec![k, j]];
+                            let left_val = jacobians_ref[0][&vec![input_jac_idx, self_jac_idx0]]
+                                * inputs_ref[1][&vec![k, j]];
                             left_writer(tmp_left, left_val).unwrap();
 
                             let tmp_right = match global_index(
                                 &vec![input_jac_idx, right_jac_idx1],
-                                &right_output_shape,
+                                right_output_shape_ref,
                                 None,
                             ) {
                                 Ok(t) => t,
@@ -296,13 +311,13 @@ pub(crate) fn bmm_jvp<T: Numeric>(
                                 }
                             };
                             // println!("tmp_right={tmp_right:?}");
-                            let right_val = jacobians[0][&vec![input_jac_idx, self_jac_idx0]]
-                                * inputs[0][&vec![i, k]];
+                            let right_val = jacobians_ref[0][&vec![input_jac_idx, self_jac_idx0]]
+                                * inputs_ref[0][&vec![i, k]];
                             right_writer(tmp_right, right_val).unwrap();
                         }
-                    };
-                    // s.spawn(closure)
-                    closure(s);
+                    });
+
+                    // s.spawn(closure);
                 }
             }
         }
