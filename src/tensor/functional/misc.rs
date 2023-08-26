@@ -1,10 +1,9 @@
 use super::super::numeric::*;
 use crate::tensor::autograd::Derivative;
-use crate::tensor::utils::{global_index, ElementIterator};
+use crate::tensor::utils::{global_index, ElementIterator, SplitArrayWriter};
 use crate::tensor::{autograd, RawTensor, RcTensor, TensorLike};
 
-use crossbeam::channel::{unbounded, Receiver, Sender};
-use std::{iter, ops::Deref, sync::Arc};
+use std::ops::Deref;
 
 use rayon;
 
@@ -138,68 +137,6 @@ where
     }
 }
 
-struct SplitArrayWriter<'a, T: Numeric> {
-    segments: Vec<&'a mut [T]>,
-    bit_width: usize,
-    width: usize,
-    splits: usize,
-    senders: Option<Arc<Vec<Sender<(usize, T)>>>>,
-    receivers: Vec<Receiver<(usize, T)>>,
-}
-
-impl<'a, T: Numeric> SplitArrayWriter<'a, T> {
-    fn new(slice: &'a mut [T]) -> Self {
-        let bit_width = 5;
-        let width = 1 << bit_width;
-        let splits = slice.len() / width;
-        let segments: Vec<_> = slice.rchunks_mut(width).collect();
-        let (senders, receivers) = iter::repeat_with(unbounded).take(segments.len()).unzip();
-        SplitArrayWriter {
-            segments,
-            bit_width,
-            width,
-            splits,
-            senders: Some(Arc::new(senders)),
-            receivers,
-        }
-    }
-
-    pub fn get_writer(
-        &self,
-    ) -> impl Fn(usize, T) -> Result<(), crossbeam::channel::SendError<(usize, T)>> {
-        let senders = self.senders.clone().unwrap();
-        let bit_width = self.bit_width;
-        // let mask = (1 << bit_width) - 1;
-        move |global_idx, val| {
-            let sender_idx = global_idx >> bit_width;
-            senders[sender_idx].send((global_idx, val))
-        }
-    }
-
-    pub fn start_then_join<'b>(mut self, scope: &rayon::Scope<'b>)
-    where
-        Self: 'b,
-    {
-        self.senders = None;
-        scope.spawn(move |inner_scope| {
-            self.segments
-                .into_iter()
-                .zip(self.receivers.into_iter())
-                .enumerate()
-                .for_each(move |(slice_idx, (slice, rx))| {
-                    inner_scope.spawn(move |_| {
-                        rx.iter().for_each(|(global_idx, value)| {
-                            let local_idx: usize = global_idx - slice_idx * self.width;
-                            assert!(local_idx < slice.len(), 
-                                "got invalid index: global_idx={global_idx}, local_idx={local_idx}, slice.len()={}", slice.len());
-                            slice[local_idx] += value;
-                        })
-                    })
-                })
-        })
-    }
-}
-
 /// c[i,j] = dot(A[i, ..], B[..,j])
 /// so A[i,k] * B[k,j] appears for all j -> so J_A[ø[i,j], ø[i,k], ] = B[k,j]
 /// so A[i,k] * B[k,j] appears for all j -> so J_A[ø_J[i,j], ø_B[k,j], ] = A[i,k]
@@ -212,13 +149,6 @@ pub(crate) fn bmm_jvp<T: Numeric>(
     inputs: Vec<RcTensor<T>>,
     jacobians: Vec<RcTensor<T>>,
 ) -> Vec<RcTensor<T>> {
-    // assert!(match std::env::var("RAYON_NUM_THREADS") {
-    //     Ok(s) => match s.parse::<usize>() {
-    //         Ok(n) => n >= 2,
-    //         _ => false,
-    //     },
-    //     _ => true,
-    // });
     assert!(
         inputs.len() == 2 && jacobians.len() == 1,
         "inputs.len()={}, jacobians.len()={}",

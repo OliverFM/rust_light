@@ -1,19 +1,22 @@
-use crate::tensor::numeric::*;
-
-use crate::tensor::{RawTensor, RcTensor, TensorLike, TensorList};
-use num::traits::real::Real;
-
-use crate::tensor::autograd::*;
-
 use crate::tensor::autograd::Derivative;
+use crate::tensor::autograd::*;
+use crate::tensor::numeric::*;
 use crate::tensor::utils::IndexIterator;
-use crate::tensor::utils::{global_index, increment_index, ElementIterator};
-use std::ops::{Deref, Sub};
+use crate::tensor::utils::{
+    global_index, increment_index, tensor_index, tensor_index_inplace, ElementIterator,
+    SplitArrayWriter,
+};
+use crate::tensor::{RawTensor, RcTensor, TensorLike, TensorList};
 
-use std::cmp::max;
+use std::{
+    cmp::max,
+    ops::{Deref, Sub},
+};
 
 use itertools::EitherOrBoth::{Both, Left, Right};
 use itertools::Itertools;
+use num::traits::real::Real;
+use rayon;
 
 // pub fn tanh<T, U, V>(tensor_like: U) -> RcTensor<T>
 // where
@@ -154,35 +157,48 @@ pub(crate) fn jvp_from_diagonal_broadcast<T: Numeric>(
     let mut array = vec![T::zero(); jvp_shape[0] * jvp_shape[1]];
     let mut idx = vec![0; diagonal.shape().len()];
     let mut orig_idx = vec![0; broadcast_shape.len()];
-    // let mut tensor_idx = vec![0; ]
-    //    dbg!(&idx, diagonal.shape(), grad.shape(), &jvp_shape);
-    //    // dbg!(&diagonal);
-    loop {
-        // through all elements of the broadcast input
-        // noting that this is going along the diagonal of J_left,
-        // in their expanded broadcasted form
-        // We then compute grad @ diagonal
-        let jac_idx1 = global_index(&idx, diagonal.shape(), None).unwrap();
-        for jac_idx0 in 0..dim_0 {
-            // let input_idx = global_index(&idx, diagonal.shape(), None).unwrap();
-            let output_idx = global_index(&orig_idx, input_shape, None).unwrap();
-            //            // dbg!(vec![jac_idx0, input_idx], &jvp_shape);
-            // let diag_jac_idx = global_index(&vec![jac_idx0, input_idx], &jvp_shape, None).unwrap();
-            //            dbg!(&output_idx);
-            let output_jac_idx =
-                global_index(&vec![jac_idx0, output_idx], &jvp_shape, None).unwrap();
 
-            let grad_val = grad[&vec![jac_idx0, jac_idx1]];
-            let diag_val = diagonal[&idx];
-            //            //            dbg!(&diag_jac_idx, &idx, &grad_val, &jac_idx0, &jac_idx1);
+    let split = 0;
+    let split_array_writer = SplitArrayWriter::new(&mut array);
+    const CHUNK_WIDTH: usize = 64;
+    rayon::in_place_scope(|s| {
+        let mut idx = idx.clone();
+        let mut orig_idx = orig_idx.clone();
+        let mut writer = split_array_writer.get_writer();
+        // while split < array.len() {
+        // let end_idx = tensor_index(...)
+        // TODO: calculate correct start and end indices
+        loop {
+            // through all elements of the broadcast input
+            // noting that this is going along the diagonal of J_left,
+            // in their expanded broadcasted form
+            // We then compute grad @ diagonal
+            let jac_idx1 = global_index(&idx, diagonal.shape(), None).unwrap();
+            for jac_idx0 in 0..dim_0 {
+                // let input_idx = global_index(&idx, diagonal.shape(), None).unwrap();
+                let output_idx = global_index(&orig_idx, input_shape, None).unwrap();
+                //            // dbg!(vec![jac_idx0, input_idx], &jvp_shape);
+                // let diag_jac_idx = global_index(&vec![jac_idx0, input_idx], &jvp_shape, None).unwrap();
+                //            dbg!(&output_idx);
+                let output_jac_idx =
+                    global_index(&vec![jac_idx0, output_idx], &jvp_shape, None).unwrap();
 
-            array[output_jac_idx] += diag_val * grad_val; // TODO: multiply with diagonal
+                let grad_val = grad[&vec![jac_idx0, jac_idx1]];
+                let diag_val = diagonal[&idx];
+                //            //            dbg!(&diag_jac_idx, &idx, &grad_val, &jac_idx0, &jac_idx1);
+
+                writer(output_jac_idx, diag_val * grad_val).unwrap(); // TODO: multiply with diagonal
+            }
+            if !increment_index(&mut idx, &diagonal.shape()[..]) {
+                break;
+            }
+            assert!(increment_index(&mut orig_idx, broadcast_shape));
         }
-        if !increment_index(&mut idx, &diagonal.shape()[..]) {
-            break;
-        }
-        assert!(increment_index(&mut orig_idx, broadcast_shape));
-    }
+
+        // }
+        split_array_writer.start_then_join(s);
+    });
+
     let raw_left_grad = RawTensor::new(array, jvp_shape);
 
     RcTensor::from_raw(raw_left_grad)

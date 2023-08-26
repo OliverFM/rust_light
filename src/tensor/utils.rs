@@ -2,7 +2,10 @@ use crate::tensor::numeric::Numeric;
 use crate::tensor::SliceRange;
 use crate::tensor::TensorLike;
 
-use std::ops::Deref;
+use std::{iter, ops::Deref, sync::Arc};
+
+use crossbeam::channel::{unbounded, Receiver, Sender};
+use rayon;
 
 pub struct ElementIterator<T, U, V>
 where
@@ -244,6 +247,64 @@ pub(in crate::tensor) fn global_index(
         multiplier *= dim;
     }
     Ok(global_idx)
+}
+pub struct SplitArrayWriter<'a, T: Numeric> {
+    segments: Vec<&'a mut [T]>,
+    bit_width: usize,
+    width: usize,
+    senders: Option<Arc<Vec<Sender<(usize, T)>>>>,
+    receivers: Vec<Receiver<(usize, T)>>,
+}
+
+impl<'a, T: Numeric> SplitArrayWriter<'a, T> {
+    pub fn new(slice: &'a mut [T]) -> Self {
+        let bit_width = 5;
+        let width = 1 << bit_width;
+        let segments: Vec<_> = slice.rchunks_mut(width).collect();
+        let (senders, receivers) = iter::repeat_with(unbounded).take(segments.len()).unzip();
+        SplitArrayWriter {
+            segments,
+            bit_width,
+            width,
+            senders: Some(Arc::new(senders)),
+            receivers,
+        }
+    }
+
+    pub fn get_writer(
+        &self,
+    ) -> impl Fn(usize, T) -> Result<(), crossbeam::channel::SendError<(usize, T)>> {
+        let senders = self.senders.clone().unwrap();
+        let bit_width = self.bit_width;
+        // let mask = (1 << bit_width) - 1;
+        move |global_idx, val| {
+            let sender_idx = global_idx >> bit_width;
+            senders[sender_idx].send((global_idx, val))
+        }
+    }
+
+    pub fn start_then_join<'b>(mut self, scope: &rayon::Scope<'b>)
+    where
+        Self: 'b,
+    {
+        self.senders = None;
+        scope.spawn(move |inner_scope| {
+            self.segments
+                .into_iter()
+                .zip(self.receivers.into_iter())
+                .enumerate()
+                .for_each(move |(slice_idx, (slice, rx))| {
+                    inner_scope.spawn(move |_| {
+                        rx.iter().for_each(|(global_idx, value)| {
+                            let local_idx: usize = global_idx - slice_idx * self.width;
+                            assert!(local_idx < slice.len(), 
+                                "got invalid index: global_idx={global_idx}, local_idx={local_idx}, slice.len()={}", slice.len());
+                            slice[local_idx] += value;
+                        })
+                    })
+                })
+        })
+    }
 }
 
 // #[test]
